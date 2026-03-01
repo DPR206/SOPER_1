@@ -47,6 +47,7 @@ int main(int argv, char **argc)
   int from = 0, to = 0;
   int error;
   double espacio;
+  double *retorno = NULL;
 
   if (argv != 4)
   {
@@ -77,6 +78,7 @@ int main(int argv, char **argc)
   else
   {
     /*tarea minero*/
+    /*Conteo rondas*/
     for (i = 0; i < rounds; i++)
     {
       /*Dividir espacio de búsqueda*/
@@ -116,8 +118,31 @@ int main(int argv, char **argc)
         }
 
         /*Crear hilo*/
-        pthread_create(hilos[j], NULL, minero, &datos[j]);
+        error = pthread_create(hilos[j], NULL, minero, &datos[j]);
+
+        if (error != 0)
+        {
+          fprintf(stderr, "pthread_create: %s\n", strerror(error));
+          fprintf(stdout, "Miner exited unexpectedly\n");
+          exit(EXIT_FAILURE);
+        }
+        
       }
+
+      for ( j = 0; j < num_threads; j++)
+      {
+        error = pthread_join(hilos[j], retorno);
+        if (error != 0)
+        {
+          fprintf(stderr, "pthread_join: %s\n", strerror(error));
+          fprintf(stdout, "Miner exited unexpectedly\n");
+          exit(EXIT_FAILURE);
+        } else if (retorno != NULL)
+        {
+          target = retorno;
+        }
+      }
+      
     }
 
     wpid = waitpid(pid_reg, &status, 0);
