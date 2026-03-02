@@ -24,4 +24,8 @@ pow.o : pow.c pow.h
 
 run:
 	@echo Running miner
-	@./miner 0 5 5
+	@./miner 0 5 3
+
+runv:
+	@echo Running miner valgrind
+	@valgrind --leak-check=full --trace-children=yes ./miner 0 5 3

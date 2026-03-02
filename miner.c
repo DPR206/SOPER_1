@@ -24,16 +24,12 @@ void *minero(void *arg)
     result = pow_hash(i);
     if (result == info->objective)
     {
-      found = 1;
-      resultado = i;
-      free(info);
+      found = 1; /*Se marca que se ha encontrado la solución*/
+      resultado = i; /*Se guarda la solución*/
       /*pthread_exit((void *)result);*/
       /*return (void *)result;*/
       return NULL;
-    } else
-    {
-      printf("%d\n", i);
-    }
+    } 
   }
 
   /*pthread_exit(NULL)*/
@@ -49,8 +45,8 @@ int main(int argv, char **argc)
   int target, rounds, num_threads;
   int error;
   double espacio;
-  /*double *retorno = NULL;*/
 
+  /*Comprobación de argumentos de entrada*/
   if (argv != 4)
   {
     fprintf(stderr, "Error in the input parameters:\n\n");
@@ -59,12 +55,14 @@ int main(int argv, char **argc)
   }
   else
   {
+    /*Asignación de argumentos a variables*/
     target = atoi(argc[1]);
     rounds = atoi(argc[2]);
     num_threads = atoi(argc[3]);
   }
 
   pid_reg = fork();
+
   if (pid_reg < 0)
   {
     perror("Error en el fork");
@@ -109,14 +107,18 @@ int main(int argv, char **argc)
       /*Crear los hilos*/
       for (j = 0, k=-1; j < num_threads; j++, k++)
       {
-        datos[j].objective = target;
-        /*found = 0;*/
+        /*Asignar los argumentos de cada hilo*/
+        datos[j].objective = target; 
+    
         if (j == 0)
         {
           datos[j].from = 0;
           datos[j].to = espacio;
-        }
-        else
+        }else if (j == num_threads-1) /*Asegurarse de que se llega al final del espacio de búsqueda*/
+        {
+          datos[j].from = datos[k].from + espacio;
+          datos[j].to = POW_LIMIT;
+        } else
         {
           datos[j].from = datos[k].from + espacio;
           datos[j].to = datos[k].to + espacio;
@@ -148,7 +150,7 @@ int main(int argv, char **argc)
         } 
       }
       
-      /*cambiar el objetivo*/
+      /*Cambiar el objetivo y resetear la variable global de 'encontrado'*/
       target = resultado;
       found = 0;
 
@@ -167,9 +169,11 @@ int main(int argv, char **argc)
       fprintf(stdout, "Logger exited unexpectedly\n");
     }
 
-    /*fprintf(stdout, "Prueba miner\n");*/
+    /*Liberacion memoria*/
     free(hilos);
     free(datos);
+
+    /*Mensaje de salida*/
     fprintf(stdout, "Miner exited with status %d\n", EXIT_SUCCESS);
     exit(EXIT_SUCCESS);
   }
