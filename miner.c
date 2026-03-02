@@ -80,13 +80,8 @@ int main(int argv, char **argc)
   else
   {
     /*tarea minero*/
-    /*Conteo rondas*/
-    for (i = 0; i < rounds; i++)
-    {
-      /*Dividir espacio de búsqueda*/
-      espacio = POW_LIMIT / num_threads;
 
-      /*Asignar memoria para los hilos*/
+    /*Asignar memoria para los hilos*/
       hilos = (pthread_t *)calloc(num_threads, sizeof(pthread_t));
 
       if (!hilos)
@@ -100,9 +95,16 @@ int main(int argv, char **argc)
 
       if (!datos)
       {
+        free(hilos);
         fprintf(stdout, "Miner exited unexpectedly\n");
         exit(EXIT_FAILURE);
       }
+
+    /*Conteo rondas*/
+    for (i = 0; i < rounds; i++)
+    {
+      /*Dividir espacio de búsqueda*/
+      espacio = POW_LIMIT / num_threads;
 
       /*Crear los hilos*/
       for (j = 0, k=-1; j < num_threads; j++, k++)
@@ -125,6 +127,8 @@ int main(int argv, char **argc)
 
         if (error != 0)
         {
+          free(hilos);
+          free(datos);
           fprintf(stderr, "pthread_create: %s\n", strerror(error));
           fprintf(stdout, "Miner exited unexpectedly\n");
           exit(EXIT_FAILURE);
@@ -164,6 +168,8 @@ int main(int argv, char **argc)
     }
 
     /*fprintf(stdout, "Prueba miner\n");*/
+    free(hilos);
+    free(datos);
     fprintf(stdout, "Miner exited with status %d\n", EXIT_SUCCESS);
     exit(EXIT_SUCCESS);
   }
