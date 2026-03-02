@@ -9,27 +9,27 @@
 #include "pow.h"
 #include "miner.h"
 
+/*Variable global*/
+int found = 0;
+double resultado;
+
 void *minero(void *arg)
 {
   Datos *info = arg;
   int i;
-  double *result;
+  long int result;
 
-  result = (double *)calloc(1, sizeof(double));
-
-  if (!result)
-  {
-    return NULL;
-  }
-
-  for (i = info->from; i < info->from; i++)
+  for (i = info->from; i < info->from && found == 0; i++)
   {
     result = pow_hash(i);
-    if (*result == info->objective)
+    if (result == info->objective)
     {
+      found = 1;
+      resultado = i;
       free(info);
       /*pthread_exit((void *)result);*/
-      return (void *)result;
+      /*return (void *)result;*/
+      return NULL;
     }
   }
 
@@ -44,10 +44,9 @@ int main(int argv, char **argc)
   Datos *datos = NULL;
   int status, i, j;
   int target, rounds, num_threads;
-  int from = 0, to = 0;
   int error;
   double espacio;
-  double *retorno = NULL;
+  /*double *retorno = NULL;*/
 
   if (argv != 4)
   {
@@ -106,6 +105,7 @@ int main(int argv, char **argc)
       for (j = 0; j < num_threads; j++)
       {
         datos[j].objective = target;
+        /*found = 0;*/
         if (j == 0)
         {
           datos[j].from = 0;
@@ -118,7 +118,7 @@ int main(int argv, char **argc)
         }
 
         /*Crear hilo*/
-        error = pthread_create(hilos[j], NULL, minero, &datos[j]);
+        error = pthread_create(&hilos[j], NULL, minero, &datos[j]);
 
         if (error != 0)
         {
@@ -129,20 +129,24 @@ int main(int argv, char **argc)
         
       }
 
+      /*Esperar hilos*/
       for ( j = 0; j < num_threads; j++)
       {
-        error = pthread_join(hilos[j], retorno);
+        error = pthread_join(hilos[j], NULL);
         if (error != 0)
         {
           fprintf(stderr, "pthread_join: %s\n", strerror(error));
           fprintf(stdout, "Miner exited unexpectedly\n");
           exit(EXIT_FAILURE);
-        } else if (retorno != NULL)
-        {
-          target = retorno;
-        }
+        } 
       }
       
+      /*cambiar el objetivo*/
+      target = resultado;
+      found = 0;
+
+      /*Comprobacion*/
+      printf("Solucion: %f\n", resultado);
     }
 
     wpid = waitpid(pid_reg, &status, 0);
