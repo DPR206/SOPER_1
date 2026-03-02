@@ -19,7 +19,7 @@ void *minero(void *arg)
   int i;
   long int result;
 
-  for (i = info->from; i < info->from && found == 0; i++)
+  for (i = info->from; i < info->to && found == 0; i++)
   {
     result = pow_hash(i);
     if (result == info->objective)
@@ -30,6 +30,9 @@ void *minero(void *arg)
       /*pthread_exit((void *)result);*/
       /*return (void *)result;*/
       return NULL;
+    } else
+    {
+      printf("%d\n", i);
     }
   }
 
@@ -42,7 +45,7 @@ int main(int argv, char **argc)
   pid_t pid_reg, wpid;
   pthread_t *hilos = NULL;
   Datos *datos = NULL;
-  int status, i, j;
+  int status, i, j, k;
   int target, rounds, num_threads;
   int error;
   double espacio;
@@ -101,8 +104,8 @@ int main(int argv, char **argc)
         exit(EXIT_FAILURE);
       }
 
-      /*Realizar las rondas*/
-      for (j = 0; j < num_threads; j++)
+      /*Crear los hilos*/
+      for (j = 0, k=-1; j < num_threads; j++, k++)
       {
         datos[j].objective = target;
         /*found = 0;*/
@@ -113,8 +116,8 @@ int main(int argv, char **argc)
         }
         else
         {
-          datos[j].from += espacio;
-          datos[j].to += espacio;
+          datos[j].from = datos[k].from + espacio;
+          datos[j].to = datos[k].to + espacio;
         }
 
         /*Crear hilo*/
