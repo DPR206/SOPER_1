@@ -37,7 +37,7 @@ void *minero(void *arg)
 
 int main(int argv, char **argc)
 {
-  pid_t pid_reg, wpid, ppid;
+  pid_t pid_reg, ppid;
   pthread_t *hilos = NULL;
   Datos *datos = NULL;
   int pipe_status, status, i, j, k;
@@ -308,7 +308,7 @@ int main(int argv, char **argc)
       exit(EXIT_FAILURE);
     }
 
-    wpid = waitpid(pid_reg, &status, 0);
+    waitpid(pid_reg, &status, 0);
     if (WIFEXITED(status))
     {
       fprintf(stdout, "Logger exited with status %d\n", WEXITSTATUS(status));
