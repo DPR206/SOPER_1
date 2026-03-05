@@ -3,7 +3,7 @@
 
 #define SIZE 256
 #define CONTINUE 8
-#define MESSAGE 20
+#define MESSAGE 22
 
 typedef struct datos
 {

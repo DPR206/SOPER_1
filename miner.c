@@ -44,8 +44,8 @@ int main(int argv, char **argc)
   int target, rounds, num_threads, acc_round, solution;
   int error;
   double espacio;
-  int log_to_miner[2], miner_to_log[2];
-  char buffer[SIZE], filename[SIZE], validated[SIZE];
+  int log_to_miner[2], miner_to_log[2], validated;
+  char buffer[SIZE], filename[SIZE], str_validated[SIZE];
   FILE *file = NULL;
   char *toks = NULL;
   int nbytes = 0;
@@ -135,18 +135,20 @@ int main(int argv, char **argc)
       target = atoi(toks);
       toks = strtok(NULL, "|");
       solution = atof(toks);
+      toks = strtok(NULL, "|");
+      validated = atof(toks);
 
-      if(solution == 9331340){
-        strcpy(validated, "rejected");
+      if(validated){
+        strcpy(str_validated, "validated");
       } else {
-        strcpy(validated, "validated");
+        strcpy(str_validated, "rejected");
       }
 
       if(solution != -1){
         fprintf(file, "Id:       %d\n", acc_round);
         fprintf(file, "Winner:   %d\n", (int)ppid);
         fprintf(file, "Target:   %08d\n", (int)target);
-        fprintf(file, "Solution: %08d (%s)\n", (int)solution, validated);
+        fprintf(file, "Solution: %08d (%s)\n", (int)solution, str_validated);
         fprintf(file, "Votes:    %d/%d\n", acc_round, acc_round);
         fprintf(file, "Wallets:  %d:%d\n\n", (int)ppid, acc_round);
       }
@@ -254,12 +256,21 @@ int main(int argv, char **argc)
         } 
       }
       
+      /*Validar solucion*/
+      if(resultado == 9331340){
+        validated = 0; /*rejected*/
+        strcpy(str_validated, "rejected");
+      } else {
+        validated = 1; /*validated*/
+        strcpy(str_validated, "accepted");
+      }
+
       /*Comprobacion*/
-      printf("Solution accepted: %08d --> %08d\n", (int)target, (int)resultado);
+      printf("Solution %s: %08d --> %08d\n", str_validated, (int)target, (int)resultado);
 
       /*Mandar mensaje a logger*/
       nbytes = 0;
-      nbytes = sprintf(buffer, "%02d|%08d|%08d", i + 1, target, (int)resultado);
+      nbytes = sprintf(buffer, "%02d|%08d|%08d|%01d", i + 1, target, (int)resultado, validated);
       if(nbytes != MESSAGE){
         perror("sprintf");
         fprintf(stdout, "Miner exited unexpectedly\n");
@@ -282,7 +293,7 @@ int main(int argv, char **argc)
     /*Mandar señal de fin*/
     nbytes = 0;
     resultado = -1;
-    nbytes = sprintf(buffer, "%02d|%08d|%08d", i + 1, target, (int)resultado);
+    nbytes = sprintf(buffer, "%02d|%08d|%08d|%01d", i + 1, target, (int)resultado, validated);
     if(nbytes <= 0){
       perror("sprintf");
       fprintf(stdout, "Miner exited unexpectedly\n");
