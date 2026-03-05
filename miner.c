@@ -1,3 +1,11 @@
+/**
+ * @file miner.c
+ * @brief Programa de minero que resuelve un POW usando multihilos
+ *
+ *
+ * @author Duna Puente y Claudia Saiz
+ * @date 18/02/2026
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +20,14 @@
 /*Variable global*/
 int found = 0;
 double resultado;
+
+/**
+ * @brief Tarea del minero para resolver el POW
+ * @author Duna Puente y Claudia Saiz
+ *
+ * @param arg Datos necesarios para ejecutar la funcion
+ * @return NULL para todos los casos
+ */
 void *minero(void *arg)
 {
   Datos *info = arg;
@@ -35,16 +51,24 @@ void *minero(void *arg)
   return NULL;
 }
 
+/**
+ * @brief Ejecuta el programa principal
+ * @author Duna Puente y Claudia Saiz
+ *
+ * @param argv número de argumentos de entrada
+ + @param argc argumentos de entrada
+ * @return 0 en caso de éxito, 1 en caso contrario
+ */
 int main(int argv, char **argc)
 {
-  pid_t pid_reg, ppid;
+  pid_t pid_reg, ppid, wpid;
   pthread_t *hilos = NULL;
   Datos *datos = NULL;
-  int pipe_status, status, i, j, k;
+  int pipe_status, status, i, j, k, t;
   int target, rounds, num_threads, acc_round, solution;
   int error;
   double espacio;
-  int log_to_miner[2], miner_to_log[2], validated;
+  int log_to_miner[2], miner_to_log[2], validated = 0;
   char buffer[SIZE], filename[SIZE], str_validated[SIZE];
   FILE *file = NULL;
   char *toks = NULL;
@@ -87,6 +111,8 @@ int main(int argv, char **argc)
   pipe_status = pipe(miner_to_log);
   if (pipe_status == -1) {
     perror("pipe");
+    close(log_to_miner[0]);
+    close(log_to_miner[1]);
     exit(EXIT_FAILURE);
   }
 
@@ -95,6 +121,10 @@ int main(int argv, char **argc)
   if (pid_reg < 0)
   {
     perror("Error en el fork");
+    close(log_to_miner[0]);
+    close(log_to_miner[1]);
+    close(miner_to_log[0]);
+    close(miner_to_log[1]);
     exit(EXIT_FAILURE);
   }
   else if (pid_reg == 0)
@@ -104,38 +134,83 @@ int main(int argv, char **argc)
     close(miner_to_log[1]);
     ppid = getppid();
 
+    /*Crear fichero log*/
     nbytes = sprintf(filename, "%d.log", (int)ppid);
     if(nbytes <= 0){
       perror("sprintf");
+      close(log_to_miner[1]);
+      close(miner_to_log[0]);
       exit(EXIT_FAILURE);
     }
 
+    /*Abrir fichero log*/
     file = fopen(filename, "w");
     if (file == NULL) {
       perror("fopen");
+      close(log_to_miner[1]);
+      close(miner_to_log[0]);
       exit(EXIT_FAILURE);
     }
 
     do{
+      /*Leer mensaje*/
       nbytes = 0;
       nbytes = read(miner_to_log[0], buffer, MESSAGE);
       if (nbytes == -1) {
         perror("read");
+        close(log_to_miner[1]);
+        close(miner_to_log[0]);
+        fclose(file);
         fprintf(stdout, "Logger exited unexpectedly\n");
         exit(EXIT_FAILURE);
       } else if (nbytes != MESSAGE){
+        close(log_to_miner[1]);
+        close(miner_to_log[0]);
+        fclose(file);
         fprintf(stdout, "Miner closed comunication unexpectedly\n");
         exit(EXIT_FAILURE);
       }
       buffer[MESSAGE] = '\0';
 
+      /*Descifrar mensaje*/
       toks = strtok(buffer, "|");
+      if (toks == NULL){
+        perror("strtok");
+        close(log_to_miner[1]);
+        close(miner_to_log[0]);
+        fclose(file);
+        exit(EXIT_FAILURE);
+      }
       acc_round = atoi(toks);
+
       toks = strtok(NULL, "|");
+      if (toks == NULL){
+        perror("strtok");
+        close(log_to_miner[1]);
+        close(miner_to_log[0]);
+        fclose(file);
+        exit(EXIT_FAILURE);
+      }
       target = atoi(toks);
+
       toks = strtok(NULL, "|");
+      if (toks == NULL){
+        perror("strtok");
+        close(log_to_miner[1]);
+        close(miner_to_log[0]);
+        fclose(file);
+        exit(EXIT_FAILURE);
+      }
       solution = atof(toks);
+
       toks = strtok(NULL, "|");
+      if (toks == NULL){
+        perror("strtok");
+        close(log_to_miner[1]);
+        close(miner_to_log[0]);
+        fclose(file);
+        exit(EXIT_FAILURE);
+      }
       validated = atof(toks);
 
       if(validated){
@@ -144,6 +219,7 @@ int main(int argv, char **argc)
         strcpy(str_validated, "rejected");
       }
 
+      /*Escribir en fichero*/
       if(solution != -1){
         fprintf(file, "Id:       %d\n", acc_round);
         fprintf(file, "Winner:   %d\n", (int)ppid);
@@ -153,9 +229,13 @@ int main(int argv, char **argc)
         fprintf(file, "Wallets:  %d:%d\n\n", (int)ppid, acc_round);
       }
 
+      /*Mandar señal a minero*/
       nbytes = write(log_to_miner[1], "CONTINUE", CONTINUE);
       if (nbytes == -1){
         perror("write");
+        close(log_to_miner[1]);
+        close(miner_to_log[0]);
+        fclose(file);
         fprintf(stdout, "Logger exited unexpectedly\n");
         exit(EXIT_FAILURE);
       }
@@ -163,7 +243,10 @@ int main(int argv, char **argc)
 
     close(log_to_miner[1]);
     close(miner_to_log[0]);
-    fclose(file);
+    if (fclose(file) != 0) {
+      perror("fclose");
+      exit(EXIT_FAILURE);
+    }
   }
   else
   {
@@ -176,6 +259,8 @@ int main(int argv, char **argc)
 
       if (!hilos)
       {
+        close(miner_to_log[1]);
+        close(log_to_miner[0]);
         fprintf(stdout, "Miner exited unexpectedly\n");
         exit(EXIT_FAILURE);
       }
@@ -186,6 +271,8 @@ int main(int argv, char **argc)
       if (!datos)
       {
         free(hilos);
+        close(miner_to_log[1]);
+        close(log_to_miner[0]);
         fprintf(stdout, "Miner exited unexpectedly\n");
         exit(EXIT_FAILURE);
       }
@@ -199,9 +286,17 @@ int main(int argv, char **argc)
         nbytes = read(log_to_miner[0], buffer, CONTINUE);
         if (nbytes == -1) {
           perror("read");
+          close(miner_to_log[1]);
+          close(log_to_miner[0]);
+          free(hilos);
+          free(datos);
           fprintf(stdout, "Miner exited unexpectedly\n");
           exit(EXIT_FAILURE);
         } else if (nbytes != CONTINUE){
+          close(miner_to_log[1]);
+          close(log_to_miner[0]);
+          free(hilos);
+          free(datos);
           fprintf(stdout, "Logger closed comunication unexpectedly\n");
           exit(EXIT_FAILURE);
         }
@@ -235,9 +330,14 @@ int main(int argv, char **argc)
 
         if (error != 0)
         {
+          fprintf(stderr, "pthread_create: %s\n", strerror(error));
+          for (t = 0; t < j; t++) {
+            pthread_join(hilos[t], NULL);
+          }
           free(hilos);
           free(datos);
-          fprintf(stderr, "pthread_create: %s\n", strerror(error));
+          close(miner_to_log[1]);
+          close(log_to_miner[0]);
           fprintf(stdout, "Miner exited unexpectedly\n");
           exit(EXIT_FAILURE);
         }
@@ -250,6 +350,10 @@ int main(int argv, char **argc)
         error = pthread_join(hilos[j], NULL);
         if (error != 0)
         {
+          close(miner_to_log[1]);
+          close(log_to_miner[0]);
+          free(hilos);
+          free(datos);
           fprintf(stderr, "pthread_join: %s\n", strerror(error));
           fprintf(stdout, "Miner exited unexpectedly\n");
           exit(EXIT_FAILURE);
@@ -273,6 +377,10 @@ int main(int argv, char **argc)
       nbytes = sprintf(buffer, "%02d|%08d|%08d|%01d", i + 1, target, (int)resultado, validated);
       if(nbytes != MESSAGE){
         perror("sprintf");
+        close(miner_to_log[1]);
+        close(log_to_miner[0]);
+        free(hilos);
+        free(datos);
         fprintf(stdout, "Miner exited unexpectedly\n");
         exit(EXIT_FAILURE);
       }
@@ -281,6 +389,10 @@ int main(int argv, char **argc)
       nbytes = write(miner_to_log[1], buffer, MESSAGE);
       if(nbytes <= 0){
         perror("write");
+        close(miner_to_log[1]);
+        close(log_to_miner[0]);
+        free(hilos);
+        free(datos);
         fprintf(stdout, "Miner exited unexpectedly\n");
         exit(EXIT_FAILURE);
       }
@@ -296,6 +408,10 @@ int main(int argv, char **argc)
     nbytes = sprintf(buffer, "%02d|%08d|%08d|%01d", i + 1, target, (int)resultado, validated);
     if(nbytes <= 0){
       perror("sprintf");
+      close(miner_to_log[1]);
+      close(log_to_miner[0]);
+      free(hilos);
+      free(datos);
       fprintf(stdout, "Miner exited unexpectedly\n");
       exit(EXIT_FAILURE);
     }
@@ -304,11 +420,24 @@ int main(int argv, char **argc)
     nbytes = write(miner_to_log[1], buffer, MESSAGE);
     if(nbytes <= 0){
       perror("write");
+      close(miner_to_log[1]);
+      close(log_to_miner[0]);
+      free(hilos);
+      free(datos);
       fprintf(stdout, "Miner exited unexpectedly\n");
       exit(EXIT_FAILURE);
     }
 
-    waitpid(pid_reg, &status, 0);
+    /*Esperar al proceso hijo*/
+    wpid = waitpid(pid_reg, &status, 0);
+    if(wpid == -1){
+      perror("waitpid");
+      close(miner_to_log[1]);
+      close(log_to_miner[0]);
+      free(hilos);
+      free(datos);
+      exit(EXIT_FAILURE);
+    }
     if (WIFEXITED(status))
     {
       fprintf(stdout, "Logger exited with status %d\n", WEXITSTATUS(status));
