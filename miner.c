@@ -12,7 +12,6 @@
 /*Variable global*/
 int found = 0;
 double resultado;
-
 void *minero(void *arg)
 {
   Datos *info = arg;
@@ -38,13 +37,18 @@ void *minero(void *arg)
 
 int main(int argv, char **argc)
 {
-  pid_t pid_reg, wpid;
+  pid_t pid_reg, wpid, ppid;
   pthread_t *hilos = NULL;
   Datos *datos = NULL;
-  int status, i, j, k;
-  int target, rounds, num_threads;
+  int pipe_status, status, i, j, k;
+  int target, rounds, num_threads, acc_round;
   int error;
   double espacio;
+  int log_to_miner[2], miner_to_log[2];
+  char buffer[SIZE], filename[SIZE];
+  FILE *file = NULL;
+  char *toks = NULL;
+  int nbytes = 0;
 
   /*Comprobación de argumentos de entrada*/
   if (argv != 4)
@@ -61,7 +65,22 @@ int main(int argv, char **argc)
     num_threads = atoi(argc[3]);
   }
 
+  /*Crear tuberias*/
+  pipe_status = pipe(log_to_miner);
+  if (pipe_status == -1) {
+    perror("pipe");
+    exit(EXIT_FAILURE);
+  }
+
+  pipe_status = pipe(miner_to_log);
+  if (pipe_status == -1) {
+    perror("pipe");
+    exit(EXIT_FAILURE);
+  }
+
+  /*Fork()*/
   pid_reg = fork();
+
 
   if (pid_reg < 0)
   {
@@ -71,13 +90,59 @@ int main(int argv, char **argc)
   else if (pid_reg == 0)
   {
     /*tarea registrador*/
+    close(log_to_miner[0]);
+    close(miner_to_log[1]);
+    ppid = getppid();
 
-    fprintf(stdout, "Prueba logger\n");
-    fprintf(stdout, "Logger exited with status %d\n", EXIT_SUCCESS);
+    nbytes = sprintf(filename, "%d.log", (int)ppid);
+    if(nbytes <= 0){
+      perror("sprintf");
+      exit(EXIT_FAILURE);
+    }
+
+    file = fopen(filename, "w");
+    if (file == NULL) {
+      perror("fopen");
+      exit(EXIT_FAILURE);
+    }
+
+    do{
+      nbytes = 0;
+      nbytes = read(miner_to_log[0], buffer, MESSAGE);
+      buffer[MESSAGE + 1] = '\0';
+
+      toks = strtok(buffer, "|");
+      acc_round = atoi(toks);
+      toks = strtok(NULL, "|");
+      target = atoi(toks);
+      toks = strtok(NULL, "|");
+      resultado = atof(toks);
+
+      if(resultado != -1){
+        fprintf(file, "Id:       %d\n", acc_round);
+        fprintf(file, "Winner:   %d\n", (int)ppid);
+        fprintf(file, "Target:   %08d\n", (int)target);
+        fprintf(file, "Solution: %08d\n", (int)resultado);
+        fprintf(file, "Votes:    %d/%d\n", acc_round, acc_round);
+        fprintf(file, "Wallets:  %d:%d\n\n", (int)ppid, acc_round);
+      }
+
+      nbytes = write(log_to_miner[1], "CONTINUE", CONTINUE);
+      if (nbytes == -1){
+        perror("write");
+        exit(EXIT_FAILURE);
+      }
+    } while (resultado != -1);
+
+    close(log_to_miner[1]);
+    close(miner_to_log[0]);
+    fclose(file);
   }
   else
   {
     /*tarea minero*/
+    close(miner_to_log[0]);
+    close(log_to_miner[1]);
 
     /*Asignar memoria para los hilos*/
       hilos = (pthread_t *)calloc(num_threads, sizeof(pthread_t));
@@ -101,6 +166,19 @@ int main(int argv, char **argc)
     /*Conteo rondas*/
     for (i = 0; i < rounds; i++)
     {
+      /*Esperar mensaje de confirmacion de logger*/
+      if(i != 0){
+        nbytes = 0;
+        nbytes = read(log_to_miner[0], buffer, CONTINUE);
+        if (nbytes == -1) {
+          perror("read");
+          exit(EXIT_FAILURE);
+        } else if (nbytes != CONTINUE){
+          fprintf(stdout, "Logger closed comunication unexpectedly\n");
+          exit(EXIT_FAILURE);
+        }
+      }
+
       /*Dividir espacio de búsqueda*/
       espacio = POW_LIMIT / num_threads;
 
@@ -150,16 +228,39 @@ int main(int argv, char **argc)
         } 
       }
       
+      /*Comprobacion*/
+      printf("Solution: %08d --> %08d\n", (int)target, (int)resultado);
+
+      /*Mandar mensaje a logger*/
+      nbytes = 0;
+      nbytes = sprintf(buffer, "%02d|%08d|%08d", i + 1, target, (int)resultado);
+      if(nbytes != MESSAGE){
+        perror("sprintf");
+        exit(EXIT_FAILURE);
+      }
+
+      nbytes = write(miner_to_log[1], buffer, MESSAGE);
+      if(nbytes <= 0){
+        perror("write");
+        exit(EXIT_FAILURE);
+      }
+
       /*Cambiar el objetivo y resetear la variable global de 'encontrado'*/
       target = resultado;
       found = 0;
-
-      /*Comprobacion*/
-      printf("Solucion: %f\n", resultado);
     }
 
-    wpid = waitpid(pid_reg, &status, 0);
+    /*Mandar señal de fin*/
+    nbytes = 0;
+    resultado = -1;
+    nbytes = sprintf(buffer, "%02d|%08d|%08d", i + 1, target, (int)resultado);
+    if(nbytes <= 0){
+      perror("sprintf");
+      exit(EXIT_FAILURE);
+    }
+    write(miner_to_log[1], buffer, nbytes + 1);
 
+    wpid = waitpid(pid_reg, &status, 0);
     if (WIFEXITED(status))
     {
       fprintf(stdout, "Logger exited with status %d\n", WEXITSTATUS(status));
@@ -172,6 +273,8 @@ int main(int argv, char **argc)
     /*Liberacion memoria*/
     free(hilos);
     free(datos);
+    close(miner_to_log[1]);
+    close(log_to_miner[0]);
 
     /*Mensaje de salida*/
     fprintf(stdout, "Miner exited with status %d\n", EXIT_SUCCESS);
