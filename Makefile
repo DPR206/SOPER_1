@@ -1,6 +1,7 @@
 CC = gcc -ansi -pedantic
 CFLAGS = -Wall
 EXE = miner
+OBJ = miner.o pow.o logger.o
 
 all : $(EXE)
 
@@ -8,19 +9,19 @@ all : $(EXE)
 clean :
 	rm -f *.o core $(EXE)
 
-$(EXE) : % : %.o pow.o
+$(EXE) : $(OBJ)
 	@echo "#---------------------------"
 	@echo "# Generating $@ "
-	@echo "# Depepends on $^"
+	@echo "# Depends on $^"
 	@echo "# Has changed $<"
-	$(CC) $(CFLAGS) -o $@ $@.o pow.o
+	$(CC) $(CFLAGS) -o $@ $(OBJ)
 
-pow.o : pow.c pow.h
+%.o : %.c
 	@echo "#---------------------------"
 	@echo "# Generating $@ "
-	@echo "# Depepends on $^"
+	@echo "# Depends on $^"
 	@echo "# Has changed $<"
-	$(CC) $(CFLAGS) -c $<
+	$(CC) $(CFLAGS) -c $^
 
 run:
 	@echo Running miner

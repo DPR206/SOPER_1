@@ -16,6 +16,7 @@
 
 #include "pow.h"
 #include "miner.h"
+#include "logger.h"
 
 /*Variable global*/
 int found = 0;
@@ -61,17 +62,15 @@ void *minero(void *arg)
  */
 int main(int argv, char **argc)
 {
-  pid_t pid_reg, ppid, wpid;
+  pid_t pid_reg, wpid;
   pthread_t *hilos = NULL;
   Datos *datos = NULL;
   int pipe_status, status, i, j, k, t;
-  int target, rounds, num_threads, acc_round, solution;
-  int error;
+  int target, rounds, num_threads;
+  int error, log_status = 0;
   double espacio;
   int log_to_miner[2], miner_to_log[2], validated = 0;
-  char buffer[SIZE], filename[SIZE], str_validated[SIZE];
-  FILE *file = NULL;
-  char *toks = NULL;
+  char buffer[SIZE], str_validated[SIZE];
   int nbytes = 0;
 
   /*Comprobación de argumentos de entrada*/
@@ -132,120 +131,15 @@ int main(int argv, char **argc)
     /*tarea registrador*/
     close(log_to_miner[0]);
     close(miner_to_log[1]);
-    ppid = getppid();
 
-    /*Crear fichero log*/
-    nbytes = sprintf(filename, "%d.log", (int)ppid);
-    if(nbytes <= 0){
-      perror("sprintf");
+    log_status = logger_actions(miner_to_log[0], log_to_miner[1]);
+    if(log_status == 0){
       close(log_to_miner[1]);
       close(miner_to_log[0]);
       exit(EXIT_FAILURE);
-    }
-
-    /*Abrir fichero log*/
-    file = fopen(filename, "w");
-    if (file == NULL) {
-      perror("fopen");
+    } else if (log_status == 1){
       close(log_to_miner[1]);
       close(miner_to_log[0]);
-      exit(EXIT_FAILURE);
-    }
-
-    do{
-      /*Leer mensaje*/
-      nbytes = 0;
-      nbytes = read(miner_to_log[0], buffer, MESSAGE);
-      if (nbytes == -1) {
-        perror("read");
-        close(log_to_miner[1]);
-        close(miner_to_log[0]);
-        fclose(file);
-        fprintf(stdout, "Logger exited unexpectedly\n");
-        exit(EXIT_FAILURE);
-      } else if (nbytes != MESSAGE){
-        close(log_to_miner[1]);
-        close(miner_to_log[0]);
-        fclose(file);
-        fprintf(stdout, "Miner closed comunication unexpectedly\n");
-        exit(EXIT_FAILURE);
-      }
-      buffer[MESSAGE] = '\0';
-
-      /*Descifrar mensaje*/
-      toks = strtok(buffer, "|");
-      if (toks == NULL){
-        perror("strtok");
-        close(log_to_miner[1]);
-        close(miner_to_log[0]);
-        fclose(file);
-        exit(EXIT_FAILURE);
-      }
-      acc_round = atoi(toks);
-
-      toks = strtok(NULL, "|");
-      if (toks == NULL){
-        perror("strtok");
-        close(log_to_miner[1]);
-        close(miner_to_log[0]);
-        fclose(file);
-        exit(EXIT_FAILURE);
-      }
-      target = atoi(toks);
-
-      toks = strtok(NULL, "|");
-      if (toks == NULL){
-        perror("strtok");
-        close(log_to_miner[1]);
-        close(miner_to_log[0]);
-        fclose(file);
-        exit(EXIT_FAILURE);
-      }
-      solution = atof(toks);
-
-      toks = strtok(NULL, "|");
-      if (toks == NULL){
-        perror("strtok");
-        close(log_to_miner[1]);
-        close(miner_to_log[0]);
-        fclose(file);
-        exit(EXIT_FAILURE);
-      }
-      validated = atof(toks);
-
-      if(validated){
-        strcpy(str_validated, "validated");
-      } else {
-        strcpy(str_validated, "rejected");
-      }
-
-      /*Escribir en fichero*/
-      if(solution != -1){
-        fprintf(file, "Id:       %d\n", acc_round);
-        fprintf(file, "Winner:   %d\n", (int)ppid);
-        fprintf(file, "Target:   %08d\n", (int)target);
-        fprintf(file, "Solution: %08d (%s)\n", (int)solution, str_validated);
-        fprintf(file, "Votes:    %d/%d\n", acc_round, acc_round);
-        fprintf(file, "Wallets:  %d:%d\n\n", (int)ppid, acc_round);
-      }
-
-      /*Mandar señal a minero*/
-      nbytes = write(log_to_miner[1], "CONTINUE", CONTINUE);
-      if (nbytes == -1){
-        perror("write");
-        close(log_to_miner[1]);
-        close(miner_to_log[0]);
-        fclose(file);
-        fprintf(stdout, "Logger exited unexpectedly\n");
-        exit(EXIT_FAILURE);
-      }
-    } while (solution != -1);
-
-    close(log_to_miner[1]);
-    close(miner_to_log[0]);
-    if (fclose(file) != 0) {
-      perror("fclose");
-      exit(EXIT_FAILURE);
     }
   }
   else
