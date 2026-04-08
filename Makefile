@@ -1,13 +1,16 @@
 CC = gcc -ansi -pedantic
 CFLAGS = -Wall
 EXE = miner
-OBJ = miner.o pow.o logger.o
+OBJ = pow.o logger.o worker.o miner.o
 
 all : $(EXE)
 
 .PHONY : clean
 clean :
 	rm -f *.o core $(EXE)
+
+cleanlog :
+	rm -f *.log *.pid *.tgt
 
 $(EXE) : $(OBJ)
 	@echo "#---------------------------"
@@ -23,10 +26,10 @@ $(EXE) : $(OBJ)
 	@echo "# Has changed $<"
 	$(CC) $(CFLAGS) -c $^
 
-run:
+run: cleanlog
 	@echo Running miner
-	@./miner 0 5 1
+	@./miner 3 5 & ./miner 5 2
 
 runv:
 	@echo Running miner valgrind
-	@valgrind --leak-check=full --track-origins=yes --trace-children=yes ./miner 0 5 3
+	@valgrind --leak-check=full --track-origins=yes --trace-children=yes ./miner 10 5
