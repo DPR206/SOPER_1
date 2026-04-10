@@ -30,7 +30,7 @@
 #define FILE_ROUND_NAME "round.pid"
 
 #define FIRST_TARGET 0
-#define MAX_TRIES 1000
+#define MAX_TRIES 10000
 
 int worker_actions(int secs, int num_threads, int reader, int writer);
 

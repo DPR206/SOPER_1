@@ -382,17 +382,19 @@ int entrar(int *target){
       }
       /*Nos aseguramos que una vez que empezamos la ronda, no se apuntaran más*/
       if(num_pids > 1){
+        while(sem_wait(mutex_round) == -1);
+        if(!write_round()){
+          perror("write_round");
+          sem_post(mutex_round);
+          sem_post(mutex_pid);
+          salir();
+        }
+        sem_post(mutex_round);
+
         for(i=0; i<num_pids; i++){
           if(i != pos){
             kill(pids[i], SIGUSR1);
           }
-          while(sem_wait(mutex_round) == -1);
-          if(!write_round()){
-            perror("write_round");
-            sem_post(mutex_pid);
-            salir();
-          }
-          sem_post(mutex_round);
         }
         sem_post(mutex_pid);
         break;

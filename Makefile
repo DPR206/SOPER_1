@@ -26,10 +26,10 @@ $(EXE) : $(OBJ)
 	@echo "# Has changed $<"
 	$(CC) $(CFLAGS) -c $^
 
-run: cleanlog
+run: 
 	@echo Running miner
 	@./miner 2 10 & ./miner 3 1 & ./miner 4 5 & ./miner 4 5
 
-runv: cleanlog
+runv: 
 	@echo Running miner valgrind
-	@valgrind --leak-check=full --track-origins=yes --trace-children=yes ./miner 2 10 & ./miner 3 1 & ./miner 4 5
+	@valgrind --leak-check=full --track-origins=yes --trace-children=yes ./miner 4 10 & ./miner 6 1 
