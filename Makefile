@@ -28,8 +28,8 @@ $(EXE) : $(OBJ)
 
 run: cleanlog
 	@echo Running miner
-	@./miner 3 5 & ./miner 5 2
+	@./miner 2 10 & ./miner 3 1 & ./miner 4 5
 
-runv:
+runv: cleanlog
 	@echo Running miner valgrind
 	@valgrind --leak-check=full --track-origins=yes --trace-children=yes ./miner 10 5

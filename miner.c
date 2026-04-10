@@ -33,10 +33,12 @@ int main(int argv, char **argc) {
   int log_status = 1, worker_status = 1;
   int log_to_miner[2], miner_to_log[2];
 
-  /*if(1){
-    sem_unlink("/mutex1");
-    return 1;
-  }
+  /*Borro los semáforos usados por si acaso (no debería ser necesario)*/
+  sem_unlink("/mutex1");
+  sem_unlink("/mutex2");
+  sem_unlink("/mutex3");
+  sem_unlink("/mutex4");
+  sem_unlink("/mutex5");
 
   /*Comprobación de argumentos de entrada*/
   if (argv != 3)
