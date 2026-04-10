@@ -20,7 +20,7 @@ sem_t *mutex_round = NULL;
 sem_t *mutex_vot = NULL;
 
 /*Funciones privadas*/
-int send_message(int writer, int round, int target, double resultado, int validated);
+int send_message(int writer, int round, int target, double resultado, int validated, int votes, int num_procs);
 int read_message(int reader);
 
 int entrar(int *target);
@@ -36,8 +36,8 @@ int write_target(int target);
 int first_proc(int fpid, int *target);
 int other_proc(int *target);
 
-int fin_de_ronda(int *target, int *validated);
-int read_vots(int fvot, int *num_vots);
+int fin_de_ronda(int *target, int *validated, int *votes, int *num_procs);
+int read_vots(int fvot, int *num_vots, int *num_y, int *num_n);
 int write_round();
 
 void handler_SIGUSR1(int sig) {}
@@ -68,6 +68,16 @@ void *minero(void *arg) {
   return NULL;
 }
 
+/**
+ * @brief Hace la acción de un proceso minero
+ * @author Duna Puente y Claudia Saiz
+ *
+ * @param secs Número de segundos que tiene el minero
+ * @param num_threads Número de hilos que lanza el minero
+ * @param reader Descriptor de fichero de la tubería de lectura con logger
+ * @param writer Descriptor de fichero de la tubería de escritura con logger
+ * @return 1 si ejecuta correctamente, 0 en caso contrario
+ */
 int worker_actions(int secs, int num_threads, int reader, int writer){
   pthread_t *hilos = NULL;
   Datos *datos = NULL;
@@ -77,6 +87,7 @@ int worker_actions(int secs, int num_threads, int reader, int writer){
   int target;
   sigset_t set, oldset;
   struct sigaction act;
+  int votes = 0, num_procs = 0;
 
   /*Asignar memoria para los hilos*/
   hilos = (pthread_t *)calloc(num_threads, sizeof(pthread_t));
@@ -100,6 +111,7 @@ int worker_actions(int secs, int num_threads, int reader, int writer){
     perror("sem_open");
     free(hilos);
     free(datos);
+    fprintf(stdout, "Miner exited unexpectedly\n");
     return 0;
   }
 
@@ -109,6 +121,7 @@ int worker_actions(int secs, int num_threads, int reader, int writer){
     sem_close(mutex_pid);
     free(hilos);
     free(datos);
+    fprintf(stdout, "Miner exited unexpectedly\n");
     return 0;
   }
 
@@ -119,6 +132,7 @@ int worker_actions(int secs, int num_threads, int reader, int writer){
     sem_close(mutex_target);
     free(hilos);
     free(datos);
+    fprintf(stdout, "Miner exited unexpectedly\n");
     return 0;
   }
 
@@ -130,6 +144,7 @@ int worker_actions(int secs, int num_threads, int reader, int writer){
     sem_close(mutex_winner);
     free(hilos);
     free(datos);
+    fprintf(stdout, "Miner exited unexpectedly\n");
     return 0;
   }
 
@@ -139,9 +154,10 @@ int worker_actions(int secs, int num_threads, int reader, int writer){
     sem_close(mutex_pid);
     sem_close(mutex_target);
     sem_close(mutex_winner);
-    sem_close(mutex_vot);
+    sem_close(mutex_round);
     free(hilos);
     free(datos);
+    fprintf(stdout, "Miner exited unexpectedly\n");
     return 0;
   }
 
@@ -155,7 +171,8 @@ int worker_actions(int secs, int num_threads, int reader, int writer){
 
 
   /*Registrarse como nuevo proceso*/
-  if(!entrar(&target)){  
+  if(!entrar(&target)){
+    fprintf(stdout, "Miner exited unexpectedly\n");  
     free(hilos);
     free(datos);
     return 0;
@@ -173,12 +190,13 @@ int worker_actions(int secs, int num_threads, int reader, int writer){
 
   /*Empiezan las rondas*/
   while(!flag) {
-    /*Resetear la variable global de 'encontrado'*/
+    /*Resetear la variable global de 'found'*/
     found = 0;
 
     /*Esperar mensaje de confirmacion de logger*/
     if(i != 0) {
-      if(!read_message(reader)){    
+      if(!read_message(reader)){ 
+        fprintf(stdout, "Miner exited unexpectedly\n");   
         free(hilos);
         free(datos);
         return 0;
@@ -232,20 +250,19 @@ int worker_actions(int secs, int num_threads, int reader, int writer){
       } 
     }
 
-    /*Comprobacion*/
-    printf("Solution %d: %08d --> %08d %d\n", i + 1, (int)target, (int)resultado, getpid());
-
-    /*Mandar mensaje a logger*/
-    if(!send_message(writer, i + 1 , target, resultado, validated)){
+    if(!fin_de_ronda(&target, &validated, &votes, &num_procs)){
+      fprintf(stdout, "Miner exited unexpectedly\n");
       free(hilos);
       free(datos);
-      salir();
       return 0;
     }
 
-    if(!fin_de_ronda(&target, &validated)){
+    /*Mandar mensaje a logger*/
+    if(!send_message(writer, i + 1 , target, resultado, validated, votes, num_procs)){
+      fprintf(stdout, "Miner exited unexpectedly\n");
       free(hilos);
       free(datos);
+      salir();
       return 0;
     }
     i++;
@@ -253,15 +270,15 @@ int worker_actions(int secs, int num_threads, int reader, int writer){
 
   /*Se borra del fichero si ha terminado su tiempo*/
   if(flag){
-    printf("Intento salir... %d\n", getpid());
     if(!salir()){
+      fprintf(stdout, "Miner exited unexpectedly\n");
       return 0;
     }
-    printf("    He salido ok %d\n", getpid());
   }
 
   /*Mandar señal de fin*/
-  if(!send_message(writer, i + 1, target, -1, validated)){
+  if(!send_message(writer, i + 1, target, -1, validated, votes, num_procs)){
+    fprintf(stdout, "Miner exited unexpectedly\n");
     free(hilos);
     free(datos);
     return 0;
@@ -273,10 +290,23 @@ int worker_actions(int secs, int num_threads, int reader, int writer){
   return 1;
 }
 
-int send_message(int writer, int round, int target, double resultado, int validated){
+/**
+ * @brief Manda un mensaje a logger con la información de la ronda
+ * @author Duna Puente y Claudia Saiz
+ *
+ * @param writer Descriptor de fichero de la tubería de escritura con logger
+ * @param round Ronda actual
+ * @param target Objetivo de la ronda actual
+ * @param resultado Resultado de la ronda actual
+ * @param validated Indica si se ha ganado esta ronda o no
+ * @param votes Número de votos a favor esta ronda
+ * @param num_procs Número de procesos que han votado en total en esta ronda
+ * @return 1 si ejecuta correctamente, 0 en caso contrario
+ */
+int send_message(int writer, int round, int target, double resultado, int validated, int votes, int num_procs){
   int nbytes = 0;
   char buffer[SIZE];
-  nbytes = sprintf(buffer, "%03d|%08d|%08d|%01d", round, target, (int)resultado, validated);
+  nbytes = sprintf(buffer, "%03d|%08d|%08d|%01d|%02d|%02d", round, target, (int)resultado, validated, votes, num_procs);
   if(nbytes <= 0){
     perror("sprintf");
     fprintf(stdout, "Miner exited unexpectedly\n");
@@ -292,6 +322,13 @@ int send_message(int writer, int round, int target, double resultado, int valida
   return 1;
 }
 
+/**
+ * @brief Lee el mensaje de CONTINUE del logger
+ * @author Duna Puente y Claudia Saiz
+ *
+ * @param reader Descriptor de fichero de la tubería de lectura con logger
+ * @return 1 si ejecuta correctamente, 0 en caso contrario
+ */
 int read_message(int reader){
   int nbytes = 0;
   char buffer[SIZE];
@@ -307,18 +344,25 @@ int read_message(int reader){
   return 1;
 }
 
+/**
+ * @brief Hace la acción de entrar en el programa y registrarse
+ * @author Duna Puente y Claudia Saiz
+ *
+ * @param target Primer objetivo actualizado
+ * @return 1 si ejecuta correctamente, 0 en caso contrario
+ */
 int entrar(int *target){
   int fpid;
   pid_t pids[SIZE];
   int num_pids, pos, i;
 
-  sem_wait(mutex_pid);
+  while(sem_wait(mutex_pid) == -1);
   
   fpid = open(FILE_PID_NAME, O_CREAT | O_EXCL | O_RDWR , S_IRUSR | S_IWUSR);
   if (fpid != -1) {
     /*Primer proceso*/
     if(!first_proc(fpid, target)){
-      fprintf(stdout, "Miner exited unexpectedly\n");
+      perror("first_proc");
       close(fpid);
       sem_post(mutex_pid);
       salir();
@@ -329,9 +373,9 @@ int entrar(int *target){
     /* Manda señal de SIGUSR1 para empezar la ronda*/
     while(1){
       usleep(100);
-      sem_wait(mutex_pid);
+      while(sem_wait(mutex_pid) == -1);
       if(!read_pids(fpid, pids, &num_pids, &pos)){
-        fprintf(stdout, "Miner exited unexpectedly\n");
+        perror("read_pids loop");
         sem_post(mutex_pid);
         salir();
         return 0;
@@ -342,9 +386,9 @@ int entrar(int *target){
           if(i != pos){
             kill(pids[i], SIGUSR1);
           }
-          sem_wait(mutex_round);
+          while(sem_wait(mutex_round) == -1);
           if(!write_round()){
-            fprintf(stdout, "Miner exited unexpectedly\n");
+            perror("write_round");
             sem_post(mutex_pid);
             salir();
           }
@@ -362,7 +406,7 @@ int entrar(int *target){
     if (errno == EEXIST) {
       /*No primer proceso*/
       if(!other_proc(target)){
-        fprintf(stdout, "Miner exited unexpectedly\n");
+        perror("other_proc");
         sem_close(mutex_pid);
         return 0;
       }    
@@ -375,6 +419,14 @@ int entrar(int *target){
   return 1;
 }
 
+/**
+ * @brief Hace la acción de entrar en el programa para el primer proceso
+ * @author Duna Puente y Claudia Saiz
+ *
+ * @param fpid Descriptor de fichero de pids abierto
+ * @param target Primer objetivo actualizado
+ * @return 1 si ejecuta correctamente, 0 en caso contrario
+ */
 int first_proc(int fpid, int *target){
   int nbytes = 0;
   pid_t pids[SIZE];
@@ -382,7 +434,7 @@ int first_proc(int fpid, int *target){
   int num_pids, pos, i, ftarget, fvot, fround;
 
   /*Crear fichero voting y cerrarlo*/
-  sem_wait(mutex_vot);
+  while(sem_wait(mutex_vot) == -1);
   fvot = open(FILE_VOT_NAME, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
   if(fvot == -1){
     perror("open");
@@ -392,14 +444,14 @@ int first_proc(int fpid, int *target){
   sem_post(mutex_vot);
 
   /*Crear fichero round y cerrarlo*/
-  sem_wait(mutex_vot);
+  while(sem_wait(mutex_round) == -1);
   fround = open(FILE_ROUND_NAME, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
   if(fround == -1){
     perror("open");
     return 0;
   }
   close(fround);
-  sem_post(mutex_vot);
+  sem_post(mutex_round);
 
   /*Escribir en fichero de pids (sección crítica)*/
   if(!write_pid(fpid)){
@@ -416,7 +468,7 @@ int first_proc(int fpid, int *target){
   }
 
   /*Escribir en el fichero de target (sección crítica)*/
-  sem_wait(mutex_target);
+  while(sem_wait(mutex_target) == -1);
   *target = FIRST_TARGET;
   /*Crear fichero target*/
   ftarget = open(FILE_TARGET_NAME, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
@@ -447,6 +499,13 @@ int first_proc(int fpid, int *target){
   return 1;
 }
 
+/**
+ * @brief Hace la acción de entrar en el programa para procesos que no son el primero
+ * @author Duna Puente y Claudia Saiz
+ *
+ * @param target Primer objetivo actualizado
+ * @return 1 si ejecuta correctamente, 0 en caso contrario
+ */
 int other_proc(int *target){
   sigset_t espera_usr1;
   pid_t pids[SIZE];
@@ -455,13 +514,14 @@ int other_proc(int *target){
   /*Abrir fichero ya creado*/
   fpid = open(FILE_PID_NAME, O_RDWR);
   if (fpid == -1) {
-    perror("open");
+    perror("open fpid");
     sem_post(mutex_pid);
     return 0;
   }
 
   /*Escribir en fichero de pids (sección crítica)*/
   if(!write_pid(fpid)){
+    perror("write_pid");
     sem_post(mutex_pid);
     close(fpid);
     return 0;
@@ -470,6 +530,7 @@ int other_proc(int *target){
   /*Imprimir mensaje de entrada*/
   fprintf(stdout, "Miner %d added to the system\n", getpid());
   if(!read_pids(fpid, pids, &num_pids, &pos)){
+    perror("read_pids");
     sem_post(mutex_pid);
     close(fpid);
     return 0;
@@ -481,8 +542,9 @@ int other_proc(int *target){
   fflush(stdout);
   sem_post(mutex_pid);
 
-  sem_wait(mutex_target);
+  while(sem_wait(mutex_target) == -1);
   if(!read_target(target)){
+    perror("read_target");
     sem_post(mutex_target);
     return 0;
   }
@@ -496,16 +558,22 @@ int other_proc(int *target){
   return 1;
 }
 
+/**
+ * @brief Hace la acción de salir del registro de pids y del programa
+ * @author Duna Puente y Claudia Saiz
+ *
+ * @return 1 si ejecuta correctamente, 0 en caso contrario
+ */
 int salir(){
   int fpid, pos, num_pids;
   pid_t pids_array[SIZE];
 
-  sem_wait(mutex_pid);
+  while(sem_wait(mutex_pid) == -1);
 
   /*Abrir fichero*/
   fpid = open(FILE_PID_NAME, O_RDWR);
   if (fpid == -1) {
-    perror("open");
+    perror("open fpid");
     sem_post(mutex_pid);
     sem_close(mutex_pid);
     return 0;
@@ -564,6 +632,13 @@ int salir(){
   return 1;
 }
 
+/**
+ * @brief Escribe en el fichero de pids el pid del proceso
+ * @author Duna Puente y Claudia Saiz
+ *
+ * @param fpid Descriptor de fichero de pids abierto
+ * @return 1 si ejecuta correctamente, 0 en caso contrario
+ */
 int write_pid(int fpid){
   int nbytes = 0;
   char buffer[SIZE];
@@ -584,6 +659,16 @@ int write_pid(int fpid){
   return 1;
 }
 
+/**
+ * @brief Lee los pids del fichero
+ * @author Duna Puente y Claudia Saiz
+ *
+ * @param fpid Descriptor de fichero de pids abierto
+ * @param pids Array de pids en el fichero
+ * @param num_pids Número de pids en el fichero actualizado
+ * @param pos Posición del pid del proceso en el fichero actualizado
+ * @return 1 si ejecuta correctamente, 0 en caso contrario
+ */
 int read_pids(int fpid, pid_t *pids, int *num_pids, int *pos) {
   FILE *file = NULL;
   int i = 0;
@@ -613,6 +698,16 @@ int read_pids(int fpid, pid_t *pids, int *num_pids, int *pos) {
   return 1;
 }
 
+/**
+ * @brief Vuelve a escribir el fichero de pids sin el pid del proceso
+ * @author Duna Puente y Claudia Saiz
+ *
+ * @param fpid Descriptor de fichero de pids abierto
+ * @param pids Array de pids en el fichero
+ * @param num_pids Número de pids en el fichero
+ * @param pos Posición del pid del proceso en el fichero
+ * @return 1 si ejecuta correctamente, 0 en caso contrario
+ */
 int rewrite_pids(int fpid, pid_t *pids, int num_pids, int pos) {
   FILE *file = NULL;
   int i;
@@ -635,6 +730,13 @@ int rewrite_pids(int fpid, pid_t *pids, int num_pids, int pos) {
   return 1;
 }
 
+/**
+ * @brief Lee el objetivo para la siguiente ronad del fichero target
+ * @author Duna Puente y Claudia Saiz
+ *
+ * @param target Objetivo actualizado para la siguiente ronda
+ * @return 1 si ejecuta correctamente, 0 en caso contrario
+ */
 int read_target(int *target){
   FILE *file = NULL;
   int ftarget = open(FILE_TARGET_NAME, O_RDWR);
@@ -662,6 +764,13 @@ int read_target(int *target){
   return 1;
 }
 
+/**
+ * @brief Escribe en el fichero de target el siguiente objetivo
+ * @author Duna Puente y Claudia Saiz
+ *
+ * @param target Objetivo que se debe escribir para la siguiente ronda
+ * @return 1 si ejecuta correctamente, 0 en caso contrario
+ */
 int write_target(int target){
   int nbytes;
   char buffer[SIZE];
@@ -690,49 +799,65 @@ int write_target(int target){
   return 1;
 }
 
-int fin_de_ronda(int *target, int *validated){
+/**
+ * @brief Gestiona la lógica del final de una ronda
+ * @author Duna Puente y Claudia Saiz
+ *
+ * @param target Objetivo actualizado para la siguiente ronda
+ * @param validated Indica si se ha ganado la ronda o no
+ * @param votes Número de votos "Y" que ha tenido
+ * @param num_procs Número de procesos en total que participaron
+ * @return 1 si ejecuta correctamente, 0 en caso contrario
+ */
+int fin_de_ronda(int *target, int *validated, int *votes, int *num_procs){
   sigset_t espera_usr1, espera_usr2;
   int try = 0, nbytes;
   pid_t pids[SIZE];
   char buffer[SIZE];
-  int num_pids, pos, i;
+  int num_pids, pos, i, p = 0;
   int num_vots, fvot, fround, fpid;
-  char c_validated;
+  int num_y, num_n;
+  char c_validated, str_votes[SIZE], str_validated[SIZE];
 
   if(sem_trywait(mutex_winner)==0){
     /*Ganador de la ronda*/
-    sem_wait(mutex_target);
+    while(sem_wait(mutex_target) == -1);
     *target = resultado;
     if(!write_target(resultado)){
-      perror("write_target");
+      perror("write_target fin_de_ronda");
       sem_post(mutex_target);
+      sem_post(mutex_winner);
       return 0;
     }
     sem_post(mutex_target);
 
     /*Leer procesos en ronda y mandar que voten*/
-    sem_wait(mutex_vot);
+    while(sem_wait(mutex_vot) == -1);
     fvot = open(FILE_VOT_NAME, O_RDWR);
     if(fvot == -1){
-      perror("open");
+      perror("open fvot");
+      sem_post(mutex_target);
+      sem_post(mutex_winner);
       return 0;
     }
     ftruncate(fvot, 0);
     sem_post(mutex_vot);
 
+    while(sem_wait(mutex_round) == -1);
     fround = open(FILE_ROUND_NAME, O_RDWR);
     if(fround == -1){
-      perror("open");
+      perror("open fround");
       sem_post(mutex_target);
       sem_post(mutex_winner);
       return 0;
     }
+    sem_post(mutex_round);
 
     /*Leer los procesos que han participado en esta ronda*/
-    sem_wait(mutex_round);
+    while(sem_wait(mutex_round) == -1);
     if(!read_pids(fround, pids, &num_pids, &pos)){
-      fprintf(stdout, "Miner exited unexpectedly\n");
-      sem_close(mutex_pid);
+      perror("read_pids");
+      sem_post(mutex_round);
       return 0;
     }
     sem_post(mutex_round);
@@ -744,8 +869,10 @@ int fin_de_ronda(int *target, int *validated){
 
     /*Esperar a que voten todos los procesos participantes*/
     do{
-      sem_wait(mutex_vot);
-      if(!read_vots(fvot, &num_vots)){
+      while(sem_wait(mutex_vot) == -1);
+      if(!read_vots(fvot, &num_vots, &num_y, &num_n)){
+        perror("read_vots");
+        sem_post(mutex_round);
         close(fvot);
         return 0;
       }
@@ -754,30 +881,54 @@ int fin_de_ronda(int *target, int *validated){
       try++;
     } while (num_vots != num_pids-1 && try < MAX_TRIES);
 
+    /*Imprimir comprobación*/
+    *votes = num_y;
+    *num_procs = num_y + num_n;
+    str_votes[p++] = ' ';
+    for (i = 0; i < num_y; i++) {
+      str_votes[p++] = 'Y';
+      str_votes[p++] = ' ';
+    }
+    for (i = 0; i < num_n; i++) {
+      str_votes[p++] = 'N';
+      str_votes[p++] = ' ';
+    }
+    str_votes[p] = '\0';
+    if(num_y >= num_n) {
+      *validated = 1;
+      strcpy(str_validated, "Accepted");
+    } else {
+      *validated = 0;
+      strcpy(str_validated, "Rejected");
+    }
+    fprintf(stdout, "Winner %d => [%s] => %s\n", getpid(), str_votes, str_validated);
+    fflush(stdout);
+
     /* Manda señal de SIGUSR1 para empezar la ronda*/
     fpid = open(FILE_PID_NAME, O_RDWR);
     if(fpid == -1){
-      fprintf(stdout, "Miner exited unexpectedly\n");
+      perror("open fpid");
       sem_close(mutex_pid);
       return 0;
     }
     while(1){
-      sem_wait(mutex_pid);
+      while(sem_wait(mutex_pid) == -1);
       if(!read_pids(fpid, pids, &num_pids, &pos)){
-        fprintf(stdout, "Miner exited unexpectedly\n");
-        sem_close(mutex_pid);
+        perror("read_pids");
+        sem_post(mutex_pid);
         return 0;
       }
       /*Nos aseguramos que una vez que empezamos la ronda, no se apuntan más*/
       if(num_pids > 1 ){
         if(!write_round()){
-          fprintf(stdout, "Miner exited unexpectedly\n");
-          sem_close(mutex_pid);
+          perror("write_round");
+          sem_post(mutex_pid);
           return 0;
         }
         sem_post(mutex_pid);
         break;
       }
+
       /*Si somos el último proceso y se acaba nuestro tiempo nos salimos*/
       if(flag){
         sem_post(mutex_pid);
@@ -803,7 +954,7 @@ int fin_de_ronda(int *target, int *validated){
     sigsuspend(&espera_usr2);
 
     /*Leen el siguiente objetivo*/
-    sem_wait(mutex_target);
+    while(sem_wait(mutex_target) == -1);
     if(!read_target(target)){
       return 0;
     }
@@ -817,7 +968,7 @@ int fin_de_ronda(int *target, int *validated){
     sem_post(mutex_target);
 
     /*Escribir mi voto en fichero de votos*/
-    sem_wait(mutex_vot);
+    while(sem_wait(mutex_vot) == -1);
     fvot = open(FILE_VOT_NAME, O_RDWR | O_APPEND);
     if(fvot == -1){
       return 0;
@@ -851,10 +1002,21 @@ int fin_de_ronda(int *target, int *validated){
   return 1;
 }
 
-int read_vots(int fvot, int *num_vots){
+/**
+ * @brief Lee el fichero de votos y devuelve el número de votos, y de cada tipo
+ * @author Duna Puente y Claudia Saiz
+ *
+ * @param fvot Descriptor de fichero abierto
+ * @param num_vots Número de votos en total
+ * @param num_y Número de "Y" que hay en el fichero
+ * @param num_vots Número de "N" que hay en el fichero
+ * @return 1 si ejecuta correctamente, 0 en caso contrario
+ */
+int read_vots(int fvot, int *num_vots, int *num_y, int *num_n){
   int i = 0;
   char temp;
   FILE *file = NULL;
+  int y, n;
 
   file = fdopen(dup(fvot), "r");
   if (file == NULL) {
@@ -863,16 +1025,28 @@ int read_vots(int fvot, int *num_vots){
   }
   fseek(file, 0, SEEK_SET);
 
+  y = 0;
+  n = 0;
   while (fscanf(file, "%c", &temp) == 1) {
+    if(temp == 'Y') y++;
+    if(temp == 'N') n++;
     i++;
   }
   rewind(file);
   fclose(file);
   *num_vots = i;
+  *num_y = y;
+  *num_n = n;
 
   return 1;
 }
 
+/**
+ * @brief Escribe en el fichero de ronda todos los pids de los procesos que van a participar en ella
+ * @author Duna Puente y Claudia Saiz
+ *
+ * @return 1 si ejecuta correctamente, 0 en caso contrario
+ */
 int write_round(){
   FILE *file = NULL;
   int i = 0, nbytes;

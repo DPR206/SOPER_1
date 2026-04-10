@@ -16,6 +16,14 @@
 
 #include "logger.h"
 
+/**
+ * @brief Hace la acción de un proceso minero
+ * @author Duna Puente y Claudia Saiz
+ *
+ * @param reader Descriptor de fichero de la tubería de lectura con worker
+ * @param writer Descriptor de fichero de la tubería de escritura con worker
+ * @return 1 si ejecuta correctamente, 0 en caso contrario
+ */
 int logger_actions(int reader, int writer){
   pid_t ppid;
   int target, acc_round, solution, validated = 0, votes, num_procs;

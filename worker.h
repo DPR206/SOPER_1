@@ -16,7 +16,7 @@
 
 #define SIZE 256
 #define CONTINUE 8
-#define MESSAGE 23
+#define MESSAGE 29
 
 #define MUTEX_PID_NAME "/mutex1"
 #define MUTEX_TARGET_NAME "/mutex2"

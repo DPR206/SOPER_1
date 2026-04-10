@@ -10,7 +10,7 @@ clean :
 	rm -f *.o core $(EXE)
 
 cleanlog :
-	rm -f *.log *.pid *.tgt *.vot
+	rm -f *.log *.pid *.tgt
 
 $(EXE) : $(OBJ)
 	@echo "#---------------------------"
@@ -28,8 +28,8 @@ $(EXE) : $(OBJ)
 
 run: cleanlog
 	@echo Running miner
-	@./miner 2 10 & ./miner 3 1 & ./miner 4 5
+	@./miner 2 10 & ./miner 3 1 & ./miner 4 5 & ./miner 4 5
 
 runv: cleanlog
 	@echo Running miner valgrind
-	@valgrind --leak-check=full --track-origins=yes --trace-children=yes ./miner 10 5
+	@valgrind --leak-check=full --track-origins=yes --trace-children=yes ./miner 2 10 & ./miner 3 1 & ./miner 4 5
