@@ -10,7 +10,7 @@ clean :
 	rm -f *.o core $(EXE)
 
 cleanlog :
-	rm -f *.log *.pid *.tgt
+	rm -f *.log *.pid *.tgt *.vot
 
 $(EXE) : $(OBJ)
 	@echo "#---------------------------"
