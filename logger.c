@@ -18,7 +18,7 @@
 
 int logger_actions(int reader, int writer){
   pid_t ppid;
-  int target, acc_round, solution, validated = 0;
+  int target, acc_round, solution, validated = 0, votes, num_procs;
   char buffer[SIZE], filename[SIZE], str_validated[SIZE];
   FILE *file = NULL;
   char *toks = NULL;
@@ -87,20 +87,36 @@ int logger_actions(int reader, int writer){
     }
     validated = atof(toks);
 
-    if(validated){
+    toks = strtok(NULL, "|");
+    if (toks == NULL){
+      perror("strtok");
+      fclose(file);
+      return 0;
+    }
+    votes = atoi(toks);
+
+    toks = strtok(NULL, "|");
+    if (toks == NULL){
+      perror("strtok");
+      fclose(file);
+      return 0;
+    }
+    num_procs = atoi(toks);
+
+    if(votes >= num_procs){
       strcpy(str_validated, "validated");
     } else {
       strcpy(str_validated, "rejected");
     }
 
     /*Escribir en fichero*/
-    if(solution != -1){
+    if(solution != -1 && validated){
       fprintf(file, "Id:       %d\n", acc_round);
       fprintf(file, "Winner:   %d\n", (int)ppid);
       fprintf(file, "Target:   %08d\n", (int)target);
       fprintf(file, "Solution: %08d (%s)\n", (int)solution, str_validated);
-      fprintf(file, "Votes:    %d/%d\n", acc_round, acc_round);
-      fprintf(file, "Wallets:  %d:%d\n\n", (int)ppid, acc_round);
+      fprintf(file, "Votes:    %d/%d\n", votes, num_procs);
+      fprintf(file, "Wallets:  %d:%d\n\n", (int)ppid, votes);
     }
 
     /*Mandar señal a minero*/
