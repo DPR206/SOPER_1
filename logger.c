@@ -118,7 +118,7 @@ int logger_actions(int reader, int writer){
     }
 
     /*Escribir en fichero*/
-    if(solution != -1 && validated){
+    if(solution != -1 && validated == 1){
       fprintf(file, "Id:       %d\n", acc_round);
       fprintf(file, "Winner:   %d\n", (int)ppid);
       fprintf(file, "Target:   %08d\n", (int)target);

@@ -44,13 +44,13 @@ int main(int argv, char **argc) {
   {
     /*Asignación de argumentos a variables*/
     secs = atoi(argc[1]);
-    if(secs < 0){
+    if(secs < 1){
       fprintf(stderr, "N_SECS must be positive integer\n");
       exit(EXIT_FAILURE);
     }
     num_threads = atoi(argc[2]);
     if(num_threads < 1){
-      fprintf(stderr, "N_THREADS must be greater than 0\n");
+      fprintf(stderr, "N_THREADS must be positive integer\n");
       exit(EXIT_FAILURE);
     }
   }

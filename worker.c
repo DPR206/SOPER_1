@@ -954,16 +954,15 @@ int fin_de_ronda(int *target, int *validated, int *votes, int *num_procs){
     sigsuspend(&espera_usr2);
 
     /*Leen el siguiente objetivo*/
+    *validated = 0;
     while(sem_wait(mutex_target) == -1);
     if(!read_target(target)){
       return 0;
     }
     if(*target == resultado){
       c_validated = 'Y';
-      *validated = 1;
     }else{
       c_validated = 'N';
-      *validated = 0;
     }
     sem_post(mutex_target);
 
