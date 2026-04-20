@@ -28,7 +28,7 @@ $(EXE) : $(OBJ)
 
 run: 
 	@echo Running miner
-	@./miner 2 10 & ./miner 3 1 & ./miner 4 5 & ./miner 4 5
+	@./miner 2 10 & ./miner 2 11 & ./miner 2 13
 
 runv: 
 	@echo Running miner valgrind
