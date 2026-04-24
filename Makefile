@@ -1,7 +1,9 @@
 CC = gcc -ansi -pedantic
 CFLAGS = -Wall
-EXE = miner
-OBJ = pow.o logger.o worker.o miner.o
+CLIBS = -lrt
+EXE = miner monitor
+OBJ_MINER = pow.o logger.o worker.o miner.o
+OBJ_MONITOR = monitor.o
 
 all : $(EXE)
 
@@ -10,14 +12,17 @@ clean :
 	rm -f *.o core $(EXE)
 
 cleanlog :
-	rm -f *.log *.pid *.tgt
+	rm -f *.log
 
-$(EXE) : $(OBJ)
+miner: $(OBJ_MINER)
 	@echo "#---------------------------"
-	@echo "# Generating $@ "
-	@echo "# Depends on $^"
-	@echo "# Has changed $<"
-	$(CC) $(CFLAGS) -o $@ $(OBJ)
+	@echo "# Generating $@"
+	$(CC) $(CFLAGS) -o $@ $(OBJ_MINER) $(CLIBS)
+
+monitor: $(OBJ_MONITOR)
+	@echo "#---------------------------"
+	@echo "# Generating $@"
+	$(CC) $(CFLAGS) -o $@ $(OBJ_MONITOR) $(CLIBS)
 
 %.o : %.c
 	@echo "#---------------------------"
@@ -26,9 +31,17 @@ $(EXE) : $(OBJ)
 	@echo "# Has changed $<"
 	$(CC) $(CFLAGS) -c $^
 
-run: 
+run_monitor: cleanlog
 	@echo Running miner
-	@./miner 2 10 & ./miner 2 11 & ./miner 2 13
+	@./monitor 100 10
+
+runv_monitor: cleanlog
+	@echo Running miner
+	@valgrind --leak-check=full --track-origins=yes --trace-children=yes ./monitor 100 10
+
+run: cleanlog
+	@echo Running miner
+	@./miner 2 10 & ./miner 3 1 & ./miner 5 5 & ./miner 5 5
 
 runv: 
 	@echo Running miner valgrind

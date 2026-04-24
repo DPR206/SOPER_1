@@ -22,7 +22,7 @@
  *
  * @param reader Descriptor de fichero de la tubería de lectura con worker
  * @param writer Descriptor de fichero de la tubería de escritura con worker
- * @return 1 si ejecuta correctamente, 0 en caso contrario
+ * @return OK si ejecuta correctamente, ERROR en caso contrario
  */
 int logger_actions(int reader, int writer){
   pid_t ppid;
@@ -37,14 +37,14 @@ int logger_actions(int reader, int writer){
   nbytes = sprintf(filename, "%d.log", (int)ppid);
   if(nbytes <= 0){
     perror("sprintf");
-    return 0;
+    return ERROR;
   }
 
   /*Abrir fichero log*/
   file = fopen(filename, "w");
   if (file == NULL) {
     perror("fopen");
-    return 0;
+    return ERROR;
   }
 
   do{
@@ -54,11 +54,11 @@ int logger_actions(int reader, int writer){
     if (nbytes == -1) {
       perror("read");
       fclose(file);
-      return 0;
+      return ERROR;
     } else if (nbytes != MESSAGE){
       fprintf(stdout, "Miner closed comunication unexpectedly\n");
       fclose(file);
-      return 0;
+      return ERROR;
     }
     buffer[MESSAGE] = '\0';
 
@@ -67,7 +67,7 @@ int logger_actions(int reader, int writer){
     if (toks == NULL){
       perror("strtok");
       fclose(file);
-      return 0;
+      return ERROR;
     }
     acc_round = atoi(toks);
 
@@ -75,7 +75,7 @@ int logger_actions(int reader, int writer){
     if (toks == NULL){
       perror("strtok");
       fclose(file);
-      return 0;
+      return ERROR;
     }
     target = atoi(toks);
 
@@ -83,7 +83,7 @@ int logger_actions(int reader, int writer){
     if (toks == NULL){
       perror("strtok");
       fclose(file);
-      return 0;
+      return ERROR;
     }
     solution = atof(toks);
 
@@ -91,7 +91,7 @@ int logger_actions(int reader, int writer){
     if (toks == NULL){
       perror("strtok");
       fclose(file);
-      return 0;
+      return ERROR;
     }
     validated = atof(toks);
 
@@ -99,7 +99,7 @@ int logger_actions(int reader, int writer){
     if (toks == NULL){
       perror("strtok");
       fclose(file);
-      return 0;
+      return ERROR;
     }
     votes = atoi(toks);
 
@@ -107,7 +107,7 @@ int logger_actions(int reader, int writer){
     if (toks == NULL){
       perror("strtok");
       fclose(file);
-      return 0;
+      return ERROR;
     }
     num_procs = atoi(toks);
 
@@ -133,14 +133,14 @@ int logger_actions(int reader, int writer){
       perror("write");
       fprintf(stdout, "Logger exited unexpectedly\n");
       fclose(file);
-      return 0;
+      return ERROR;
     }
   } while (solution != -1);
 
   if (fclose(file) != 0) {
     perror("fclose");
-    return 0;
+    return ERROR;
   }
 
-  return 1;
+  return OK;
 }

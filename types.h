@@ -1,0 +1,44 @@
+#define MUTEX_PID_NAME "/mutex1"
+#define MUTEX_TARGET_NAME "/mutex2"
+#define MUTEX_WINNER_NAME "/mutex3"
+#define MUTEX_ROUND_NAME "/mutex4"
+#define MUTEX_VOT_NAME "/mutex5"
+
+#define MEM_PID_NAME "/pids"
+#define MEM_TARGET_NAME "/target"
+#define MEM_VOT_NAME "/voting"
+#define MEM_ROUND_NAME "/round"
+
+#define MAX_PROCESOS 100
+
+typedef struct {
+	int num_pids;
+	pid_t pids[MAX_PROCESOS];
+} pids_data;
+
+typedef struct {
+  int num_vots;
+  int num_yes;
+  int num_no;
+} vots_data;
+
+typedef struct {
+  int target;
+  int validated;
+} target_data;
+
+#define MEM_PID_SIZE sizeof(pids_data)
+#define MEM_TARGET_SIZE sizeof(target_data)
+#define MEM_VOT_SIZE sizeof(vots_data)
+#define MEM_ROUND_SIZE sizeof(pids_data)
+
+#define MQ_NAME "/message_queue"
+#define MAX_MESSAGE 100
+
+#define SIZE 256
+#define CONTINUE 8
+#define MESSAGE 29
+
+#define OK 1
+#define ERROR 0
+#define EARLY 2

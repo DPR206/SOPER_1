@@ -13,16 +13,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <semaphore.h>
-#include "pow.h"
+#include <mqueue.h>
 #include "types.h"
 
-#define MAX_TRIES 1000
-
-int worker_actions(int secs, int num_threads, int reader, int writer);
-
-typedef struct datos
-{
-  double objective;
-  double from;
-  double to;
-}Datos;
+#define FIRST_TARGET 0
