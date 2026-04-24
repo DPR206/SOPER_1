@@ -31,6 +31,7 @@ int logger_actions(int reader, int writer){
   FILE *file = NULL;
   char *toks = NULL;
   int nbytes = 0;
+  int monedas = 0;
 
   /*Crear fichero log*/
   ppid = getppid();
@@ -112,6 +113,7 @@ int logger_actions(int reader, int writer){
     num_procs = atoi(toks);
 
     if(votes >= num_procs){
+      monedas++;
       strcpy(str_validated, "validated");
     } else {
       strcpy(str_validated, "rejected");
@@ -124,7 +126,7 @@ int logger_actions(int reader, int writer){
       fprintf(file, "Target:   %08d\n", (int)target);
       fprintf(file, "Solution: %08d (%s)\n", (int)solution, str_validated);
       fprintf(file, "Votes:    %d/%d\n", votes, num_procs);
-      fprintf(file, "Wallets:  %d:%d\n\n", (int)ppid, votes);
+      fprintf(file, "Wallets:  %d:%d\n\n", monedas, acc_round);
     }
 
     /*Mandar señal a minero*/

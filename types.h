@@ -1,3 +1,6 @@
+#ifndef TYPES_H
+#define TYPES_H
+
 #define MUTEX_PID_NAME "/mutex1"
 #define MUTEX_TARGET_NAME "/mutex2"
 #define MUTEX_WINNER_NAME "/mutex3"
@@ -24,6 +27,8 @@ typedef struct {
 
 typedef struct {
   int target;
+  int solution;
+  int winner;
   int validated;
 } target_data;
 
@@ -42,3 +47,5 @@ typedef struct {
 #define OK 1
 #define ERROR 0
 #define EARLY 2
+
+#endif
