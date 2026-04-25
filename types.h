@@ -27,9 +27,10 @@ typedef struct {
 
 typedef struct {
   int target;
-  int solution;
-  int winner;
-  int validated;
+  int resultado;
+  pid_t winner;
+  int votes_yes;
+  int votes_no;
 } target_data;
 
 #define MEM_PID_SIZE sizeof(pids_data)
@@ -38,11 +39,11 @@ typedef struct {
 #define MEM_ROUND_SIZE sizeof(pids_data)
 
 #define MQ_NAME "/message_queue"
-#define MAX_MESSAGE 100
+#define MAX_MESSAGE sizeof(target_data)+1
 
 #define SIZE 256
 #define CONTINUE 8
-#define MESSAGE 29
+#define MESSAGE 30
 
 #define OK 1
 #define ERROR 0

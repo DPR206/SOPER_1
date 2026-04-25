@@ -80,29 +80,26 @@ int main(int argv, char **argc) {
 
 		/*Mensaje de salida*/
 		fprintf(stdout, "Comprobador exited with status %d\n", EXIT_SUCCESS);
-		exit(EXIT_SUCCESS);
 	}
 
 	exit(EXIT_SUCCESS);
 }
 
-int monitor_actions() {
+int monitor_actions(int pid_reg) {
 
 	/*Empezar programa: crear memoria compartida y semáforos*/
 	if (!monitor_inicializar()) {
 		monitor_salir();
-		/* Salir y hacer unlink de todo
-		Comunicar al resto que he acabado?? Como??*/
+		/*Comunicar al resto que he acabado?? Como??*/
 		return ERROR;
 	}
 
-	printf("Monitor started\n");
-	printf("Waiting for miners to join the system...\n");
-	/*Comunicar mediante mensajes con comprobador*/
-	sleep(10);
-	printf("Finishing monitor\n");
+	/*Comunicar mediante memoria con comprobador*/
+	/*FALTA ESTO, he puesto el sleep para que les de tiempo a los procesos a entrar por ahora*/
+	sleep(7);
 
 	/*Salir: borrar memoria compartida y semáforos*/
+	printf("Finishing monitor\n");
 	if (!monitor_salir()) {
 		return ERROR;
 	}
@@ -121,8 +118,24 @@ int comprobador_actions() {
 		usleep(100);
 	}
 
+	while (1) {
+		target_data target_recv;
+		ssize_t nbytes = mq_receive(mq, (char *)&target_recv, MAX_MESSAGE, NULL);
+		if (nbytes == -1) {
+			perror("mq_receive");
+			return ERROR;
+		} else if (nbytes == 0) {
+			fprintf(stdout, "Monitor closed comunication unexpectedly\n");
+			return ERROR;
+		}
+		if (target_recv.target == -1) {
+			fprintf(stdout, "Last miner exited, finishing comprobador\n");
+			break;
+		}
+		fprintf(stdout, "Solution %s: %08d --> %08d\n", target_recv.votes_yes >= target_recv.votes_no ? "accepted" : "rejected", target_recv.target, target_recv.resultado);
+		fflush(stdout);
+	}
 	mq_close(mq);
-	sleep(4);
 
 	return 1;
 }

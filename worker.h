@@ -13,6 +13,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <semaphore.h>
+#include <mqueue.h>
 #include "pow.h"
 #include "types.h"
 
