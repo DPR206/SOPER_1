@@ -440,7 +440,7 @@ int abrir_recursos(pids_data **pid_mem, target_data **target_mem, vots_data **vo
 		return EARLY;
 	}
 
-	/*Abrir semáforo mutex_winner*/
+	/*Abrir semáforo mutex_round*/
 	if ((*mutex_round = sem_open(MUTEX_ROUND_NAME, O_CREAT, S_IRUSR | S_IWUSR, 1)) == SEM_FAILED) {
 		perror("sem_open mutex_round");
 		sem_close(*mutex_pid);

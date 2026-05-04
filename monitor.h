@@ -17,3 +17,18 @@
 #include "types.h"
 
 #define FIRST_TARGET 0
+#define MAX_NUM_MSG 7
+#define TAM_BUFFER 6
+
+typedef struct 
+{
+  sem_t sem_empty;
+  sem_t sem_fill;
+  sem_t sem_mutex;
+
+  validacion_data buffer[TAM_BUFFER];
+  int prod_idx;
+  int cons_idx;
+}sem_PC;
+
+#define MEM_SEMS_SIZE sizeof(sem_PC)

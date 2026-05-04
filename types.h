@@ -11,6 +11,7 @@
 #define MEM_TARGET_NAME "/target"
 #define MEM_VOT_NAME "/voting"
 #define MEM_ROUND_NAME "/round"
+#define MEM_VALIDATE_NAME "/validation"
 
 #define MAX_PROCESOS 100
 
@@ -33,10 +34,24 @@ typedef struct {
   int votes_no;
 } target_data;
 
+typedef struct {
+  pid_t propietario;
+  int monedas;
+}cartera_data;
+
+typedef struct {
+  int target;
+  int resultado;
+  int validacion;
+} validacion_data;
+
+
 #define MEM_PID_SIZE sizeof(pids_data)
 #define MEM_TARGET_SIZE sizeof(target_data)
 #define MEM_VOT_SIZE sizeof(vots_data)
 #define MEM_ROUND_SIZE sizeof(pids_data)
+#define MEM_CARTERA_SIZE sizeof(cartera_data)
+#define MEM_VALIDACION_SIZE sizeof(validacion_data)
 
 #define MQ_NAME "/message_queue"
 #define MAX_MESSAGE sizeof(target_data)+1
@@ -48,5 +63,8 @@ typedef struct {
 #define OK 1
 #define ERROR 0
 #define EARLY 2
+
+#define TRUE 1
+#define FALSE 0
 
 #endif
