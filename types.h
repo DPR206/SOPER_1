@@ -6,12 +6,14 @@
 #define MUTEX_WINNER_NAME "/mutex3"
 #define MUTEX_ROUND_NAME "/mutex4"
 #define MUTEX_VOT_NAME "/mutex5"
+#define MUTEX_CART_NAME "/mutex6"
 
 #define MEM_PID_NAME "/pids"
 #define MEM_TARGET_NAME "/target"
 #define MEM_VOT_NAME "/voting"
 #define MEM_ROUND_NAME "/round"
 #define MEM_VALIDATE_NAME "/validation"
+#define MEM_CARTERA_NAME "/cartera"
 
 #define MAX_PROCESOS 100
 
