@@ -25,14 +25,26 @@ int limpiar_semaforos(sem_PC *b);
 pids_data *pid_mem_global = NULL;
 
 void handler_monitor(int sig){
+	int i;
+
 	if (pid_mem_global != NULL) {
+
     printf("\n[Monitor] Parando el sistema...\n");
+
     pid_mem_global->monitor = 1;
+
+		for (i = 0; i < pid_mem_global->num_pids; i++) {
+  		if (pid_mem_global->pids[i] > 1) {
+      	kill(pid_mem_global->pids[i], SIGTERM);
+    	}
+  	}
   }
+
 	printf("Monitor exiting...\n");
 	sleep(1);
 	monitor_salir();
-	/*comprobador_salir();*/
+	comprobador_salir();
+	exit(EXIT_FAILURE);
 }
 
 /**

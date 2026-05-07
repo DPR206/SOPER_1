@@ -158,7 +158,7 @@ int worker_actions(int secs, int num_threads, int reader, int writer) {
 	alarm(secs);
 
 	/*Empiezan las rondas*/
-	while (!flag /*&& !pid_mem->monitor*/) {
+	while (!flag && !pid_mem->monitor) {
 		/*Resetear la variable global de 'found'*/
 		found = 0;
 
@@ -243,6 +243,14 @@ int worker_actions(int secs, int num_threads, int reader, int writer) {
 		i++;
 	}
 
+	/*Se borra del fichero si el ejecutable del monitor ha detenido su ejecución*/
+	if (pid_mem->monitor) {
+		if (!salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot, mutex_cartera)) {
+			fprintf(stdout, "Miner exited unexpectedly\n");
+			return ERROR;
+		}
+	}
+
 	/*Se borra del fichero si ha terminado su tiempo*/
 	if (flag) {
 		if (!salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot, mutex_cartera)) {
@@ -250,14 +258,6 @@ int worker_actions(int secs, int num_threads, int reader, int writer) {
 			return ERROR;
 		}
 	}
-
-	/*Se borra del fichero si el ejecutable del monitor ha detenido su ejecución*/
-	/*if (pid_mem->monitor) {
-		if (!salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot, mutex_cartera)) {
-			fprintf(stdout, "Miner exited unexpectedly\n");
-			return ERROR;
-		}
-	}*/
 
 	/*Mandar señal de fin*/
 	target_send.resultado = -1;
@@ -615,73 +615,65 @@ int entrar(pids_data *pid_mem, sem_t *mutex_pid, sem_t *mutex_target, sem_t *mut
  * @return OK si ejecuta correctamente, ERROR en caso contrario
  */
 int salir(pids_data *pid_mem, target_data *target_mem, pids_data *round_mem, vots_data *vot_mem, cartera_data *cartera_mem, mqd_t mq, sem_t *mutex_pid, sem_t *mutex_target, sem_t *mutex_winner, sem_t *mutex_round, sem_t *mutex_vot, sem_t *mutex_cart) {
-	int pos, i;
-	pid_t pids_array[MAX_PROCESOS];
-	target_data target_send;
+	int es_ultimo = 0;
+    int pos = -1;
+    int i;
+    pid_t pids_array[MAX_PROCESOS];
 
-	while (sem_wait(mutex_pid) == -1)
-		;
+    if (sem_wait(mutex_pid) == -1) {
+        return OK; 
+    }
 
-	/*Mirar si es el último*/
-	if (pid_mem->num_pids - 1 == 0) {
-		/*Mandar mensaje a comprobador de ultimo proceso*/
-		memset(&target_send, 0, sizeof(target_data));
-		target_send.target = -1;
-		if (mq_send(mq, (char *)&target_send, sizeof(target_data), 0) == -1) {
-			perror("mq_send");
-			sem_post(mutex_pid);
-			return ERROR;
-		}
+    /* Calcular si soy el último ANTES de tocar nada */
+    if (pid_mem->num_pids <= 1) {
+        es_ultimo = 1;
+    }
 
-		munmap(pid_mem, MEM_PID_SIZE);
-		munmap(target_mem, MEM_TARGET_SIZE);
-		munmap(vot_mem, MEM_VOT_SIZE);
-		munmap(round_mem, MEM_ROUND_SIZE);
-		munmap(cartera_mem, MEM_CARTERA_SIZE);
-		mq_close(mq);
-		sem_close(mutex_pid);
-		sem_close(mutex_target);
-		sem_close(mutex_winner);
-		sem_close(mutex_round);
-		sem_close(mutex_vot);
-		sem_close(mutex_cart);
-		fprintf(stdout, "Miner %d exited system (last process)\n", getpid());
-		return OK;
-	}
+    if (es_ultimo) {
+        /* Lógica del último: Mandar mensaje al mq */
+        target_data target_send;
+        memset(&target_send, 0, sizeof(target_data));
+        target_send.target = -1;
+        mq_send(mq, (char *)&target_send, sizeof(target_data), 0);
+        
+        fprintf(stdout, "Miner %d exiting system (last process)\n", getpid());
+    } else {
+        /* Lógica de no ser el último: Reestructurar array PIDs */
+        for (i = 0; i < pid_mem->num_pids; i++) {
+            if (pid_mem->pids[i] == getpid()) {
+                pos = i;
+                break;
+            }
+        }
+        if (pos != -1) {
+            for (i = pos; i < pid_mem->num_pids - 1; i++) {
+                pid_mem->pids[i] = pid_mem->pids[i + 1];
+            }
+            pid_mem->num_pids--;
+        }
+        fprintf(stdout, "Miner %d exiting system\n", getpid());
+    }
 
-	/*Reescribir fichero sin mi PID*/
-	for (i = 0; i < pid_mem->num_pids; i++) {
-		pids_array[i] = pid_mem->pids[i];
-		if (pid_mem->pids[i] == getpid())
-			pos = i;
-	}
-	for (i = pos; i < pid_mem->num_pids - 1; i++) {
-		pids_array[i] = pids_array[i + 1];
-	}
-	pid_mem->num_pids--;
-	if (memcpy(pid_mem->pids, pids_array, sizeof(pid_mem->pids)) == NULL) {
-		perror("memcpy");
-		sem_post(mutex_pid);
-		return ERROR;
-	}
+    sem_post(mutex_pid);
 
-	/*Salir*/
-	fprintf(stdout, "Miner %d exited system\n", getpid());
-	sem_post(mutex_pid);
+    if (es_ultimo) {
+        usleep(100000); 
+    }
 
-	munmap(pid_mem, MEM_PID_SIZE);
-	munmap(target_mem, MEM_TARGET_SIZE);
-	munmap(vot_mem, MEM_VOT_SIZE);
-	munmap(round_mem, MEM_ROUND_SIZE);
-	munmap(cartera_mem, MEM_CARTERA_SIZE);
-	mq_close(mq);
-	sem_close(mutex_pid);
-	sem_close(mutex_target);
-	sem_close(mutex_winner);
-	sem_close(mutex_round);
-	sem_close(mutex_vot);
-	sem_close(mutex_cart);
-	return OK;
+    munmap(pid_mem, MEM_PID_SIZE);
+    munmap(target_mem, MEM_TARGET_SIZE);
+    munmap(vot_mem, MEM_VOT_SIZE);
+    munmap(round_mem, MEM_ROUND_SIZE);
+    munmap(cartera_mem, MEM_CARTERA_SIZE);
+    mq_close(mq);
+    sem_close(mutex_pid);
+    sem_close(mutex_target);
+    sem_close(mutex_winner);
+    sem_close(mutex_round);
+    sem_close(mutex_vot);
+    sem_close(mutex_cart);
+
+    return OK;
 }
 
 /**
