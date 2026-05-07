@@ -30,8 +30,6 @@ void handler_ALRM(int sig) {
 	printf(" - Se acabó mi tiempo\n");
 }
 void handler_SIGTERM(int sig){
-	pids_data pids;
-	pids.monitor = 1;
 	printf(" - El monitor se detuvo\n");
 }
 
@@ -160,7 +158,7 @@ int worker_actions(int secs, int num_threads, int reader, int writer) {
 	alarm(secs);
 
 	/*Empiezan las rondas*/
-	while (!flag && !pid_mem->monitor) {
+	while (!flag /*&& !pid_mem->monitor*/) {
 		/*Resetear la variable global de 'found'*/
 		found = 0;
 
@@ -254,12 +252,12 @@ int worker_actions(int secs, int num_threads, int reader, int writer) {
 	}
 
 	/*Se borra del fichero si el ejecutable del monitor ha detenido su ejecución*/
-	if (pid_mem->monitor) {
+	/*if (pid_mem->monitor) {
 		if (!salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot, mutex_cartera)) {
 			fprintf(stdout, "Miner exited unexpectedly\n");
 			return ERROR;
 		}
-	}
+	}*/
 
 	/*Mandar señal de fin*/
 	target_send.resultado = -1;
@@ -627,6 +625,7 @@ int salir(pids_data *pid_mem, target_data *target_mem, pids_data *round_mem, vot
 	/*Mirar si es el último*/
 	if (pid_mem->num_pids - 1 == 0) {
 		/*Mandar mensaje a comprobador de ultimo proceso*/
+		memset(&target_send, 0, sizeof(target_data));
 		target_send.target = -1;
 		if (mq_send(mq, (char *)&target_send, sizeof(target_data), 0) == -1) {
 			perror("mq_send");

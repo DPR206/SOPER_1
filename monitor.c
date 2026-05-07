@@ -21,12 +21,18 @@ int comprobador_salir();
 int semaforos_prod_cons(sem_PC *sems);
 int limpiar_semaforos(sem_PC *b);
 
+/*Variable global*/
+pids_data *pid_mem_global = NULL;
+
 void handler_monitor(int sig){
-	pids_data pids;
+	if (pid_mem_global != NULL) {
+    printf("\n[Monitor] Parando el sistema...\n");
+    pid_mem_global->monitor = 1;
+  }
 	printf("Monitor exiting...\n");
-	pids.monitor = 1;
+	sleep(1);
 	monitor_salir();
-	comprobador_salir();
+	/*comprobador_salir();*/
 }
 
 /**
@@ -192,8 +198,6 @@ int monitor_actions(int lag_monitor, sem_PC *sems) {
 	/*Abrir memoria compartida*/
 	if (!monitor_inicializar()) {
 		monitor_salir();
-		/*Comunicar al resto que he acabado?? Como??*/
-		/*Mandar señal??*/
 		perror("Error starting monitor");
 		return ERROR;
 	}
@@ -252,12 +256,10 @@ int monitor_actions(int lag_monitor, sem_PC *sems) {
 int comprobador_actions(int lag_comprobador, sem_PC *sems) {
 
 	mqd_t mq;
-	pids_data pids;
 
 	/*Inicializar recursos: memoria compartida, mensajes y semáforos*/
 	if(!comprobador_inicializar())
 	{
-		pids.monitor = 1;
 		comprobador_salir();
 		perror("Error starting comprobador");
 		return ERROR;
@@ -266,7 +268,6 @@ int comprobador_actions(int lag_comprobador, sem_PC *sems) {
 	/*Abre la cola de mensajes*/
 	while ((mq = mq_open(MQ_NAME, O_RDWR)) == (mqd_t)-1) {
 		if (errno != ENOENT) {
-			pids.monitor = 1;
 			comprobador_salir();
 			perror("mq_open");
 			return ERROR;
@@ -282,11 +283,9 @@ int comprobador_actions(int lag_comprobador, sem_PC *sems) {
 		ssize_t nbytes = mq_receive(mq, (char *)&target_recv, MAX_MESSAGE, NULL);
 		if (nbytes == -1) {
 			perror("mq_receive");
-			pids.monitor = 1;
 			return ERROR;
 		} else if (nbytes == 0) {
 			fprintf(stdout, "Monitor closed comunication unexpectedly\n");
-			pids.monitor = 1;
 			return ERROR;
 		}
 
@@ -440,6 +439,7 @@ int comprobador_inicializar(){
 	}
 	pid_mem->num_pids = 0;
 	pid_mem->monitor = 0;
+	pid_mem_global = pid_mem;
 	close(fpid);
 
 	/*Memoria de target*/
