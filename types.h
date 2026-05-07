@@ -18,6 +18,7 @@
 #define MAX_PROCESOS 100
 
 typedef struct {
+  int monitor;
 	int num_pids;
 	pid_t pids[MAX_PROCESOS];
 } pids_data;
@@ -52,7 +53,7 @@ typedef struct {
 #define MEM_TARGET_SIZE sizeof(target_data)
 #define MEM_VOT_SIZE sizeof(vots_data)
 #define MEM_ROUND_SIZE sizeof(pids_data)
-#define MEM_CARTERA_SIZE sizeof(cartera_data)
+#define MEM_CARTERA_SIZE (sizeof(cartera_data)*MAX_PROCESOS)
 #define MEM_VALIDACION_SIZE sizeof(validacion_data)
 
 #define MQ_NAME "/message_queue"

@@ -121,7 +121,7 @@ int logger_actions(int reader, int writer) {
 			fprintf(file, "Target:   %08d\n", (int)target);
 			fprintf(file, "Solution: %08d (%s)\n", (int)solution, votes >= num_procs ? "validated" : "rejected");
 			fprintf(file, "Votes:    %d/%d\n", votes, num_procs);
-			fprintf(file, "Wallets:  %d:%d\n\n", votes >= num_procs ? monedas++ : monedas, acc_round);
+			fprintf(file, "Wallets:  %d:%d\n\n", votes >= (num_procs-votes) ? monedas++ : monedas, acc_round);
 		}
 
 		/*Mandar señal a minero*/

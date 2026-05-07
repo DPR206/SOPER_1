@@ -18,16 +18,21 @@ int found = 0;
 int send_message(int writer, int round, target_data *target_send);
 int read_message(int reader);
 
-int abrir_recursos(pids_data **pid_mem, target_data **target_mem, vots_data **vot_mem, pids_data **round_mem, cartera_data **cartera_mem, mqd_t *mq, sem_t **mutex_pid, sem_t **mutex_target, sem_t **mutex_winner, sem_t **mutex_round, sem_t **mutex_vot);
-int entrar(pids_data *pid_mem, sem_t *mutex_pid, sem_t *mutex_target, sem_t *mutex_round, pids_data *round_mem, target_data *target_mem);
-int salir(pids_data *pid_mem, target_data *target_mem, pids_data *round_mem, vots_data *vot_mem, cartera_data *cartera_mem, mqd_t mq, sem_t *mutex_pid, sem_t *mutex_target, sem_t *mutex_winner, sem_t *mutex_round, sem_t *mutex_vot);
-int fin_de_ronda(sem_t *mutex_pid, pids_data *pid_mem, sem_t *mutex_round, pids_data *round_mem, sem_t *mutex_vot, vots_data *vots_mem, sem_t *mutex_target, target_data *target_mem, sem_t *mutex_winner, mqd_t mq, target_data *target_send);
+int abrir_recursos(pids_data **pid_mem, target_data **target_mem, vots_data **vot_mem, pids_data **round_mem, cartera_data **cartera_mem, mqd_t *mq, sem_t **mutex_pid, sem_t **mutex_target, sem_t **mutex_winner, sem_t **mutex_round, sem_t **mutex_vot, sem_t **mutex_cartera);
+int entrar(pids_data *pid_mem, sem_t *mutex_pid, sem_t *mutex_target, sem_t *mutex_round, sem_t *mutex_cart, pids_data *round_mem, target_data *target_mem, cartera_data *cartera_mem);
+int salir(pids_data *pid_mem, target_data *target_mem, pids_data *round_mem, vots_data *vot_mem, cartera_data *cartera_mem, mqd_t mq, sem_t *mutex_pid, sem_t *mutex_target, sem_t *mutex_winner, sem_t *mutex_round, sem_t *mutex_vot, sem_t *mutex_cart);
+int fin_de_ronda(sem_t *mutex_pid, pids_data *pid_mem, sem_t *mutex_round, pids_data *round_mem, sem_t *mutex_vot, vots_data *vots_mem, sem_t *mutex_target, target_data *target_mem, sem_t *mutex_winner, mqd_t mq, target_data *target_send, sem_t *mutex_cart, cartera_data *cartera_mem);
 
 void handler_SIGUSR1(int sig) {}
 void handler_SIGUSR2(int sig) {}
 void handler_ALRM(int sig) {
 	flag = 1;
 	printf(" - Se acabó mi tiempo\n");
+}
+void handler_SIGTERM(int sig){
+	pids_data pids;
+	pids.monitor = 1;
+	printf(" - El monitor se detuvo\n");
 }
 
 /**
@@ -70,7 +75,7 @@ int worker_actions(int secs, int num_threads, int reader, int writer) {
 
 	target_data target_send;
 	sigset_t set, oldset;
-	struct sigaction act;
+	struct sigaction act, act2;
 
 	pids_data *pid_mem = NULL;
 	target_data *target_mem = NULL;
@@ -83,6 +88,7 @@ int worker_actions(int secs, int num_threads, int reader, int writer) {
 	sem_t *mutex_winner = NULL;
 	sem_t *mutex_round = NULL;
 	sem_t *mutex_vot = NULL;
+	sem_t *mutex_cartera = NULL;
 
 	/*Asignar memoria para los hilos*/
 	hilos = (pthread_t *)calloc(num_threads, sizeof(pthread_t));
@@ -102,7 +108,7 @@ int worker_actions(int secs, int num_threads, int reader, int writer) {
 	}
 
 	error = abrir_recursos(&pid_mem, &target_mem, &vot_mem, &round_mem, &cartera_mem, 
-												 &mq, &mutex_pid, &mutex_target, &mutex_winner, &mutex_round, &mutex_vot);
+												 &mq, &mutex_pid, &mutex_target, &mutex_winner, &mutex_round, &mutex_vot, &mutex_cartera);
 	if (error == ERROR) {
 		fprintf(stdout, "Miner exited unexpectedly\n");
 		free(hilos);
@@ -123,12 +129,22 @@ int worker_actions(int secs, int num_threads, int reader, int writer) {
 	sigaddset(&set, SIGUSR2);
 	sigprocmask(SIG_BLOCK, &set, &oldset);
 
+	/*Señal terminación monitor*/
+	act2.sa_handler = handler_SIGTERM;
+	sigemptyset(&act2.sa_mask);
+	act2.sa_flags = 0;
+	if (sigaction(SIGTERM, &act2, NULL) < 0) {
+		perror("sigaction");
+		salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot, mutex_cartera);
+		return ERROR;
+	}
+
 	/*Registrarse como nuevo proceso*/
-	if (!entrar(pid_mem, mutex_pid, mutex_target, mutex_round, round_mem, target_mem)) {
+	if (!entrar(pid_mem, mutex_pid, mutex_target, mutex_round, mutex_cartera, round_mem, target_mem, cartera_mem)) {
 		fprintf(stdout, "Miner exited unexpectedly\n");
 		free(hilos);
 		free(datos);
-		salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot);
+		salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot, mutex_cartera);
 		return ERROR;
 	}
 
@@ -138,13 +154,13 @@ int worker_actions(int secs, int num_threads, int reader, int writer) {
 	act.sa_flags = 0;
 	if (sigaction(SIGALRM, &act, NULL) < 0) {
 		perror("sigaction");
-		salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot);
+		salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot, mutex_cartera);
 		return ERROR;
 	}
 	alarm(secs);
 
 	/*Empiezan las rondas*/
-	while (!flag) {
+	while (!flag && !pid_mem->monitor) {
 		/*Resetear la variable global de 'found'*/
 		found = 0;
 
@@ -159,7 +175,7 @@ int worker_actions(int secs, int num_threads, int reader, int writer) {
 				fprintf(stdout, "Miner exited unexpectedly\n");
 				free(hilos);
 				free(datos);
-				salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot);
+				salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot, mutex_cartera);
 				return ERROR;
 			}
 		}
@@ -191,7 +207,7 @@ int worker_actions(int secs, int num_threads, int reader, int writer) {
 				}
 				free(hilos);
 				free(datos);
-				salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot);
+				salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot, mutex_cartera);
 				fprintf(stdout, "Miner exited unexpectedly\n");
 				return ERROR;
 			}
@@ -203,18 +219,18 @@ int worker_actions(int secs, int num_threads, int reader, int writer) {
 			if (error != 0) {
 				free(hilos);
 				free(datos);
-				salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot);
+				salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot, mutex_cartera);
 				fprintf(stderr, "pthread_join: %s\n", strerror(error));
 				fprintf(stdout, "Miner exited unexpectedly\n");
 				return ERROR;
 			}
 		}
 
-		if (!fin_de_ronda(mutex_pid, pid_mem, mutex_round, round_mem, mutex_vot, vot_mem, mutex_target, target_mem, mutex_winner, mq, &target_send)) {
+		if (!fin_de_ronda(mutex_pid, pid_mem, mutex_round, round_mem, mutex_vot, vot_mem, mutex_target, target_mem, mutex_winner, mq, &target_send, mutex_cartera, cartera_mem)) {
 			fprintf(stdout, "Miner exited unexpectedly\n");
 			free(hilos);
 			free(datos);
-			salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot);
+			salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot, mutex_cartera);
 			return ERROR;
 		}
 
@@ -223,7 +239,7 @@ int worker_actions(int secs, int num_threads, int reader, int writer) {
 			fprintf(stdout, "Miner exited unexpectedly\n");
 			free(hilos);
 			free(datos);
-			salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot);
+			salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot, mutex_cartera);
 			return ERROR;
 		}
 		i++;
@@ -231,7 +247,15 @@ int worker_actions(int secs, int num_threads, int reader, int writer) {
 
 	/*Se borra del fichero si ha terminado su tiempo*/
 	if (flag) {
-		if (!salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot)) {
+		if (!salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot, mutex_cartera)) {
+			fprintf(stdout, "Miner exited unexpectedly\n");
+			return ERROR;
+		}
+	}
+
+	/*Se borra del fichero si el ejecutable del monitor ha detenido su ejecución*/
+	if (pid_mem->monitor) {
+		if (!salir(pid_mem, target_mem, round_mem, vot_mem, cartera_mem, mq, mutex_pid, mutex_target, mutex_winner, mutex_round, mutex_vot, mutex_cartera)) {
 			fprintf(stdout, "Miner exited unexpectedly\n");
 			return ERROR;
 		}
@@ -321,7 +345,7 @@ int read_message(int reader) {
  * @param mutex_vot Semáforo para la memoria de votos
  * @return OK si ejecuta correctamente, EARLY si el minero ha entrado antes que el monitor, ERROR en caso de error
  */
-int abrir_recursos(pids_data **pid_mem, target_data **target_mem, vots_data **vot_mem, pids_data **round_mem, cartera_data **cartera_mem, mqd_t *mq, sem_t **mutex_pid, sem_t **mutex_target, sem_t **mutex_winner, sem_t **mutex_round, sem_t **mutex_vot) {
+int abrir_recursos(pids_data **pid_mem, target_data **target_mem, vots_data **vot_mem, pids_data **round_mem, cartera_data **cartera_mem, mqd_t *mq, sem_t **mutex_pid, sem_t **mutex_target, sem_t **mutex_winner, sem_t **mutex_round, sem_t **mutex_vot, sem_t **mutex_cart) {
 	int fpid, ftarget, fvot, fround, fcartera;
 
 	/*Abrir memoria pids*/
@@ -488,6 +512,16 @@ int abrir_recursos(pids_data **pid_mem, target_data **target_mem, vots_data **vo
 		return EARLY;
 	}
 
+	if((*mutex_cart = sem_open(MUTEX_CART_NAME, O_CREAT, S_IRUSR | S_IWUSR, 1)) == SEM_FAILED){
+		perror("sem_open mutex_cart");
+		sem_close(*mutex_pid);
+		sem_close(*mutex_target);
+		sem_close(*mutex_winner);
+		sem_close(*mutex_round);
+		sem_close(*mutex_cart);
+		return EARLY;
+	}
+
 	return OK;
 }
 
@@ -498,12 +532,19 @@ int abrir_recursos(pids_data **pid_mem, target_data **target_mem, vots_data **vo
  * @param target Primer objetivo actualizado
  * @return OK si ejecuta correctamente, ERROR en caso contrario
  */
-int entrar(pids_data *pid_mem, sem_t *mutex_pid, sem_t *mutex_target, sem_t *mutex_round, pids_data *round_mem, target_data *target_mem) {
+int entrar(pids_data *pid_mem, sem_t *mutex_pid, sem_t *mutex_target, sem_t *mutex_round, sem_t *mutex_cart, pids_data *round_mem, target_data *target_mem, cartera_data *cartera_mem) {
 	sigset_t espera_usr1;
 	int i;
 
 	while (sem_wait(mutex_pid) == -1)
 		;
+
+		/*Registrarse en la cartera*/
+	while(sem_wait(mutex_cart) == -1)
+		;
+
+	cartera_mem[pid_mem->num_pids].propietario = getpid();
+	sem_post(mutex_cart);
 
 	if (pid_mem->num_pids == 0) {
 		/*Primer proceso*/
@@ -575,7 +616,7 @@ int entrar(pids_data *pid_mem, sem_t *mutex_pid, sem_t *mutex_target, sem_t *mut
  *
  * @return OK si ejecuta correctamente, ERROR en caso contrario
  */
-int salir(pids_data *pid_mem, target_data *target_mem, pids_data *round_mem, vots_data *vot_mem, cartera_data *cartera_mem, mqd_t mq, sem_t *mutex_pid, sem_t *mutex_target, sem_t *mutex_winner, sem_t *mutex_round, sem_t *mutex_vot) {
+int salir(pids_data *pid_mem, target_data *target_mem, pids_data *round_mem, vots_data *vot_mem, cartera_data *cartera_mem, mqd_t mq, sem_t *mutex_pid, sem_t *mutex_target, sem_t *mutex_winner, sem_t *mutex_round, sem_t *mutex_vot, sem_t *mutex_cart) {
 	int pos, i;
 	pid_t pids_array[MAX_PROCESOS];
 	target_data target_send;
@@ -604,6 +645,7 @@ int salir(pids_data *pid_mem, target_data *target_mem, pids_data *round_mem, vot
 		sem_close(mutex_winner);
 		sem_close(mutex_round);
 		sem_close(mutex_vot);
+		sem_close(mutex_cart);
 		fprintf(stdout, "Miner %d exited system (last process)\n", getpid());
 		return OK;
 	}
@@ -639,6 +681,7 @@ int salir(pids_data *pid_mem, target_data *target_mem, pids_data *round_mem, vot
 	sem_close(mutex_winner);
 	sem_close(mutex_round);
 	sem_close(mutex_vot);
+	sem_close(mutex_cart);
 	return OK;
 }
 
@@ -652,7 +695,7 @@ int salir(pids_data *pid_mem, target_data *target_mem, pids_data *round_mem, vot
  * @param num_procs Número de procesos en total que participaron
  * @return OK si ejecuta correctamente, ERROR en caso contrario
  */
-int fin_de_ronda(sem_t *mutex_pid, pids_data *pid_mem, sem_t *mutex_round, pids_data *round_mem, sem_t *mutex_vot, vots_data *vots_mem, sem_t *mutex_target, target_data *target_mem, sem_t *mutex_winner, mqd_t mq, target_data *target_send) {
+int fin_de_ronda(sem_t *mutex_pid, pids_data *pid_mem, sem_t *mutex_round, pids_data *round_mem, sem_t *mutex_vot, vots_data *vots_mem, sem_t *mutex_target, target_data *target_mem, sem_t *mutex_winner, mqd_t mq, target_data *target_send, sem_t *mutex_cart, cartera_data *cartera_mem) {
 	sigset_t espera_usr1, espera_usr2;
 	int try = 0, i;
 	int num_pids_round, p = 0;
@@ -726,6 +769,18 @@ int fin_de_ronda(sem_t *mutex_pid, pids_data *pid_mem, sem_t *mutex_round, pids_
 			perror("mq_send");
 			return ERROR;
 		}
+
+		/*Apuntar monedas*/
+		sem_wait(mutex_cart);
+		for(i = 0; i < num_pids_round; i++)
+		{
+			if(cartera_mem[i].propietario == getpid()){
+				if(num_vots > ((num_y+num_n)-num_vots)){
+					cartera_mem[i].monedas++;
+				}
+			}
+		}
+		sem_post(mutex_cart);
 
 		/* Manda señal de SIGUSR1 para empezar la ronda*/
 		while (1) {

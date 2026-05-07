@@ -21,6 +21,14 @@ int comprobador_salir();
 int semaforos_prod_cons(sem_PC *sems);
 int limpiar_semaforos(sem_PC *b);
 
+void handler_monitor(int sig){
+	pids_data pids;
+	printf("Monitor exiting...\n");
+	pids.monitor = 1;
+	monitor_salir();
+	comprobador_salir();
+}
+
 /**
  * @brief Ejecuta el programa principal
  * @author Duna Puente y Claudia Saiz
@@ -33,6 +41,8 @@ int main(int argv, char **argc) {
 	int lag_comprobador, lag_monitor;
 	int pid_reg, status;
 	sem_PC *sems = NULL;
+	struct sigaction sa;
+	
 
 	/*Comprobación de argumentos de entrada*/
 	if (argv != 3) {
@@ -53,7 +63,14 @@ int main(int argv, char **argc) {
 		}
 	}
 
-	/*Mapera semáforos sin nombre productor-consumidor*/
+	sa.sa_handler = handler_monitor;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;
+
+	sigaction(SIGINT, &sa, NULL);
+  sigaction(SIGTERM, &sa, NULL);
+
+	/*Mapear semáforos sin nombre productor-consumidor*/
 	sems = mmap(NULL, MEM_SEMS_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 
 	if(sems == MAP_FAILED){
@@ -235,10 +252,12 @@ int monitor_actions(int lag_monitor, sem_PC *sems) {
 int comprobador_actions(int lag_comprobador, sem_PC *sems) {
 
 	mqd_t mq;
+	pids_data pids;
 
 	/*Inicializar recursos: memoria compartida, mensajes y semáforos*/
 	if(!comprobador_inicializar())
 	{
+		pids.monitor = 1;
 		comprobador_salir();
 		perror("Error starting comprobador");
 		return ERROR;
@@ -247,6 +266,8 @@ int comprobador_actions(int lag_comprobador, sem_PC *sems) {
 	/*Abre la cola de mensajes*/
 	while ((mq = mq_open(MQ_NAME, O_RDWR)) == (mqd_t)-1) {
 		if (errno != ENOENT) {
+			pids.monitor = 1;
+			comprobador_salir();
 			perror("mq_open");
 			return ERROR;
 		}
@@ -261,9 +282,11 @@ int comprobador_actions(int lag_comprobador, sem_PC *sems) {
 		ssize_t nbytes = mq_receive(mq, (char *)&target_recv, MAX_MESSAGE, NULL);
 		if (nbytes == -1) {
 			perror("mq_receive");
+			pids.monitor = 1;
 			return ERROR;
 		} else if (nbytes == 0) {
 			fprintf(stdout, "Monitor closed comunication unexpectedly\n");
+			pids.monitor = 1;
 			return ERROR;
 		}
 
@@ -416,6 +439,7 @@ int comprobador_inicializar(){
 		return ERROR;
 	}
 	pid_mem->num_pids = 0;
+	pid_mem->monitor = 0;
 	close(fpid);
 
 	/*Memoria de target*/
@@ -535,7 +559,12 @@ int comprobador_inicializar(){
 		return ERROR;
 	}
 	cartera_mem = mmap(NULL, MEM_CARTERA_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fcartera, 0);
-	cartera_mem->monedas = 0;
+	if (cartera_mem == MAP_FAILED) {
+    perror("mmap mem_cartera");
+    close(fcartera);
+    return ERROR;
+	}
+	memset(cartera_mem, 0, MEM_CARTERA_SIZE);
 	close(fcartera);
 
 	/*Abrir cola de mensajes*/
