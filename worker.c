@@ -787,7 +787,7 @@ int fin_de_ronda(sem_t *mutex_pid, pids_data *pid_mem, sem_t *mutex_round, pids_
 			}
 
 			/*Si somos el último proceso y se acaba nuestro tiempo nos salimos*/
-			if (flag) {
+			if (flag || pid_mem->monitor) {
 				sem_post(mutex_pid);
 				break;
 			}

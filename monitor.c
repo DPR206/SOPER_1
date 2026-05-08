@@ -24,26 +24,28 @@ int limpiar_semaforos(sem_PC *b);
 /*Variable global*/
 pids_data *pid_mem_global = NULL;
 
-void handler_monitor(int sig){
+void handler_comprobador(int sig) {
 	int i;
 
 	if (pid_mem_global != NULL) {
-
-    printf("\n[Monitor] Parando el sistema...\n");
-
-    pid_mem_global->monitor = 1;
+		printf("\n[Monitor] Parando el sistema...\n");
+		pid_mem_global->monitor = 1;
 
 		for (i = 0; i < pid_mem_global->num_pids; i++) {
-  		if (pid_mem_global->pids[i] > 1) {
-      	kill(pid_mem_global->pids[i], SIGTERM);
-    	}
-  	}
-  }
+			if (pid_mem_global->pids[i] > 1) {
+				kill(pid_mem_global->pids[i], SIGTERM);
+			}
+		}
+	}
 
 	printf("Monitor exiting...\n");
 	sleep(1);
-	monitor_salir();
 	comprobador_salir();
+	exit(EXIT_FAILURE);
+}
+
+void handler_monitor(int sig) {
+	monitor_salir();
 	exit(EXIT_FAILURE);
 }
 
@@ -59,8 +61,6 @@ int main(int argv, char **argc) {
 	int lag_comprobador, lag_monitor;
 	int pid_reg, status;
 	sem_PC *sems = NULL;
-	struct sigaction sa;
-	
 
 	/*Comprobación de argumentos de entrada*/
 	if (argv != 3) {
@@ -81,23 +81,16 @@ int main(int argv, char **argc) {
 		}
 	}
 
-	sa.sa_handler = handler_monitor;
-  sigemptyset(&sa.sa_mask);
-  sa.sa_flags = 0;
-
-	sigaction(SIGINT, &sa, NULL);
-  sigaction(SIGTERM, &sa, NULL);
-
 	/*Mapear semáforos sin nombre productor-consumidor*/
 	sems = mmap(NULL, MEM_SEMS_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 
-	if(sems == MAP_FAILED){
+	if (sems == MAP_FAILED) {
 		perror("mmap");
 		exit(EXIT_FAILURE);
 	}
 
 	/*Crear semaforos sin nombre productor-consumidor */
-	if(!semaforos_prod_cons(sems)){
+	if (!semaforos_prod_cons(sems)) {
 		perror("Error with sems of productor-consumidor");
 		exit(EXIT_FAILURE);
 	}
@@ -151,31 +144,31 @@ int main(int argv, char **argc) {
 /**
  * @brief Inicilizar y crear los recursos de productor-consumidor
  * @author Claudia Saiz y Duna Puente
- * 
+ *
  * @param sems estructura con los semáforos e índices
  * @return OK en caso de éxito, ERROR en caso de error
  */
-int semaforos_prod_cons(sem_PC *sems){
+int semaforos_prod_cons(sem_PC *sems) {
 
 	/*Abrir semáforos sin nombre*/
 	if (sem_init(&sems->sem_empty, 1, TAM_BUFFER) != 0) {
 		perror("Error vacios");
 		return ERROR;
 	}
-		
-  if (sem_init(&sems->sem_fill, 1, 0) != 0) {       
+
+	if (sem_init(&sems->sem_fill, 1, 0) != 0) {
 		perror("Error llenos");
 		return ERROR;
 	}
-		
-  if (sem_init(&sems->sem_mutex, 1, 1) != 0) {          
+
+	if (sem_init(&sems->sem_mutex, 1, 1) != 0) {
 		perror("Error mutex");
 		return ERROR;
 	}
 
 	/*Inicializar índices*/
-  sems->prod_idx = 0;
-  sems->cons_idx = 0;
+	sems->prod_idx = 0;
+	sems->cons_idx = 0;
 
 	return OK;
 }
@@ -183,16 +176,16 @@ int semaforos_prod_cons(sem_PC *sems){
 /**
  * @brief Limpia los recursos de productor-consumidor
  * @author Claudia Saiz y Duna Puente
- * 
+ *
  * @param b estructura con los recursos e índices
  * @return OK en caso de éxito, ERROR en caso de error
  */
 int limpiar_semaforos(sem_PC *b) {
-  
+
 	sem_destroy(&b->sem_empty);
-  sem_destroy(&b->sem_fill);
-  sem_destroy(&b->sem_mutex);
-  munmap(b, MEM_SEMS_SIZE);
+	sem_destroy(&b->sem_fill);
+	sem_destroy(&b->sem_mutex);
+	munmap(b, MEM_SEMS_SIZE);
 
 	return OK;
 }
@@ -200,12 +193,20 @@ int limpiar_semaforos(sem_PC *b) {
 /**
  * @brief Hace la acción del monitor
  * @author Claudia Saiz y Duna Puente
- * 
+ *
  * @param lag_monitor tiempo de espera del monitor
  * @param sems estructura con los semáforo e índices del productor-consumidor
  * @return OK en caso de éxito, ERROR en caso de error
  */
 int monitor_actions(int lag_monitor, sem_PC *sems) {
+	struct sigaction sa;
+
+	sa.sa_handler = handler_monitor;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+
+	sigaction(SIGINT, &sa, NULL);
+	sigaction(SIGTERM, &sa, NULL);
 
 	/*Abrir memoria compartida*/
 	if (!monitor_inicializar()) {
@@ -215,8 +216,7 @@ int monitor_actions(int lag_monitor, sem_PC *sems) {
 	}
 
 	/*Comunicar mediante memoria con comprobador*/
-	while (1)
-	{
+	while (1) {
 		validacion_data validacion_rec;
 
 		/*El consumidor espera a que llegue información y luego la extrae*/
@@ -225,15 +225,15 @@ int monitor_actions(int lag_monitor, sem_PC *sems) {
 
 		validacion_rec = sems->buffer[sems->cons_idx];
 		sems->cons_idx = (sems->cons_idx + 1) % TAM_BUFFER;
-		
+
 		/*Comprobar que no es un bloque especial*/
-		if(validacion_rec.target == -1){
+		if (validacion_rec.target == -1) {
 			fprintf(stdout, "Last miner exited, finishing monitor\n");
 			break;
 		}
 
 		/*Comprobar la bandera del resultado */
-		if(validacion_rec.validacion == TRUE){
+		if (validacion_rec.validacion == TRUE) {
 			fprintf(stdout, "Solution %s: %08d --> %08d\n", "accepted", validacion_rec.target, validacion_rec.resultado);
 		} else {
 			fprintf(stdout, "Solution %s: %08d !-> %08d\n", "rejected", validacion_rec.target, validacion_rec.resultado);
@@ -260,22 +260,28 @@ int monitor_actions(int lag_monitor, sem_PC *sems) {
 /**
  * @brief Hace la acción del comprobador
  * @author Claudia Saiz y Duna Puente
- * 
+ *
  * @param lag_comprobador tiempo de espera del comprobador
  * @param sems estructura con los semáforo e índices del productor-consumidor
  * @return OK en caso de éxito, ERROR en caso de error
  */
 int comprobador_actions(int lag_comprobador, sem_PC *sems) {
-
+	struct sigaction sa;
 	mqd_t mq;
 
 	/*Inicializar recursos: memoria compartida, mensajes y semáforos*/
-	if(!comprobador_inicializar())
-	{
+	if (!comprobador_inicializar()) {
 		comprobador_salir();
 		perror("Error starting comprobador");
 		return ERROR;
 	}
+
+	sa.sa_handler = handler_comprobador;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+
+	sigaction(SIGINT, &sa, NULL);
+	sigaction(SIGTERM, &sa, NULL);
 
 	/*Abre la cola de mensajes*/
 	while ((mq = mq_open(MQ_NAME, O_RDWR)) == (mqd_t)-1) {
@@ -312,7 +318,7 @@ int comprobador_actions(int lag_comprobador, sem_PC *sems) {
 			validacion_env.target = target_recv.target;
 
 			sems->buffer[sems->prod_idx] = validacion_env;
-			sems->prod_idx = (sems->prod_idx+1) % TAM_BUFFER;
+			sems->prod_idx = (sems->prod_idx + 1) % TAM_BUFFER;
 
 			/*Semáforos*/
 			sem_post(&sems->sem_mutex);
@@ -327,18 +333,18 @@ int comprobador_actions(int lag_comprobador, sem_PC *sems) {
 		sem_wait(&sems->sem_mutex);
 
 		/*Comprobar y traspasar resultados*/
-		if(target_recv.votes_yes >= target_recv.votes_no){
+		if (target_recv.votes_yes >= target_recv.votes_no) {
 			validacion_env.validacion = TRUE;
 		} else {
 			validacion_env.validacion = FALSE;
 		}
-		
+
 		validacion_env.target = target_recv.target;
 		validacion_env.resultado = target_recv.resultado;
 
 		/*Insertar en memoria compartida*/
 		sems->buffer[sems->prod_idx] = validacion_env;
-		sems->prod_idx = (sems->prod_idx+1) % TAM_BUFFER;
+		sems->prod_idx = (sems->prod_idx + 1) % TAM_BUFFER;
 
 		/*Semáforos*/
 		sem_post(&sems->sem_mutex);
@@ -361,7 +367,7 @@ int comprobador_actions(int lag_comprobador, sem_PC *sems) {
 /**
  * @brief Inicializa los recursos asociados al monitor
  * @author Claudia Saiz y Duna Puente
- * 
+ *
  * @return OK en caso de éxito, ERROR en caso de error
  */
 int monitor_inicializar() {
@@ -369,12 +375,11 @@ int monitor_inicializar() {
 	validacion_data *validate_mem = NULL;
 
 	/*Abrir memoria compartida con comprobador*/
-	while ((fvalidate = shm_open(MEM_VALIDATE_NAME, O_RDONLY, MEM_VALIDACION_SIZE)) == -1 && errno == ENOENT)
-	{
+	while ((fvalidate = shm_open(MEM_VALIDATE_NAME, O_RDONLY, MEM_VALIDACION_SIZE)) == -1 && errno == ENOENT) {
 		usleep(100);
 	}
 
-	if(fvalidate == -1){
+	if (fvalidate == -1) {
 		perror("shm_open mem_validate");
 		return ERROR;
 	}
@@ -383,10 +388,10 @@ int monitor_inicializar() {
 	validate_mem = mmap(NULL, MEM_VALIDACION_SIZE, PROT_READ, MAP_SHARED, fvalidate, 0);
 
 	if (validate_mem == MAP_FAILED) {
-    perror("mmap monitor");
-    close(fvalidate);
-    return ERROR;
-  }
+		perror("mmap monitor");
+		close(fvalidate);
+		return ERROR;
+	}
 
 	close(fvalidate);
 
@@ -396,7 +401,7 @@ int monitor_inicializar() {
 /**
  * @brief Libera los recursos pertinentes al monitor
  * @author Claudia Saiz y Duna Puente
- * 
+ *
  * @return OK en caso de éxito, ERROR en caso de error
  */
 int monitor_salir() {
@@ -410,10 +415,10 @@ int monitor_salir() {
 /**
  * @brief Inicializa los recursos pertinentes al comprobador
  * @author Claudia Saiz y Duna Puente
- * 
+ *
  * @return OK en caso de éxito, ERROR en caso de error
  */
-int comprobador_inicializar(){
+int comprobador_inicializar() {
 
 	int fpid, ftarget, fvot, fround, fvalidate, fcartera;
 	pids_data *pid_mem = NULL, *round_mem = NULL;
@@ -429,7 +434,6 @@ int comprobador_inicializar(){
 	sem_t *mutex_round = NULL;
 	sem_t *mutex_vot = NULL;
 	sem_t *mutex_cart = NULL;
-
 
 	/*Abrir memoria compartida*/
 
@@ -527,7 +531,7 @@ int comprobador_inicializar(){
 
 	/*Memoria de la validación*/
 	fvalidate = shm_open(MEM_VALIDATE_NAME, O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR);
-	if(fvalidate == -1){
+	if (fvalidate == -1) {
 		perror("shm_open mem_validate");
 		close(fpid);
 		close(ftarget);
@@ -535,7 +539,7 @@ int comprobador_inicializar(){
 		close(fround);
 		return ERROR;
 	}
-	if(ftruncate(fvalidate, MEM_VALIDACION_SIZE) == -1){
+	if (ftruncate(fvalidate, MEM_VALIDACION_SIZE) == -1) {
 		perror("ftruncate mem_validate");
 		close(fpid);
 		close(ftarget);
@@ -551,8 +555,7 @@ int comprobador_inicializar(){
 
 	/*Memoria de la cartera*/
 	fcartera = shm_open(MEM_CARTERA_NAME, O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR);
-	if (fcartera == -1)
-	{
+	if (fcartera == -1) {
 		perror("shm_open mem_cartera");
 		close(fpid);
 		close(ftarget);
@@ -560,7 +563,7 @@ int comprobador_inicializar(){
 		close(fround);
 		return ERROR;
 	}
-	if(ftruncate(fcartera, MEM_CARTERA_SIZE) == -1) {
+	if (ftruncate(fcartera, MEM_CARTERA_SIZE) == -1) {
 		perror("ftruncate mem_validate");
 		close(fpid);
 		close(ftarget);
@@ -572,9 +575,9 @@ int comprobador_inicializar(){
 	}
 	cartera_mem = mmap(NULL, MEM_CARTERA_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fcartera, 0);
 	if (cartera_mem == MAP_FAILED) {
-    perror("mmap mem_cartera");
-    close(fcartera);
-    return ERROR;
+		perror("mmap mem_cartera");
+		close(fcartera);
+		return ERROR;
 	}
 	memset(cartera_mem, 0, MEM_CARTERA_SIZE);
 	close(fcartera);
@@ -679,7 +682,7 @@ int comprobador_inicializar(){
 
 	/*Semáforo de cartera*/
 	mutex_cart = sem_open(MUTEX_CART_NAME, O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, 1);
-	if(mutex_cart == SEM_FAILED){
+	if (mutex_cart == SEM_FAILED) {
 		perror("sem_open mutex_cart");
 		close(fpid);
 		close(ftarget);
@@ -697,13 +700,12 @@ int comprobador_inicializar(){
 	sem_close(mutex_cart);
 
 	return OK;
-
 }
 
 /**
  * @brief Libera los recursos pertinentes al comprobador
  * @author Claudia Saiz y Duna Puente
- * 
+ *
  * @return OK en caso de éxito, ERROR en caso de error
  */
 int comprobador_salir() {

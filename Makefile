@@ -41,7 +41,7 @@ runv_monitor: cleanlog
 
 run: cleanlog
 	@echo Running miner
-	@./miner 1 10 & ./miner 1 1 & ./miner 2 5 & ./miner 2 5
+	@./miner 10 10 & ./miner 12 1 & ./miner 13 5 & ./miner 15 5
 
 runv: 
 	@echo Running miner valgrind

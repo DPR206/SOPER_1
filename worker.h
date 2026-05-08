@@ -17,7 +17,7 @@
 #include "pow.h"
 #include "types.h"
 
-#define MAX_TRIES 1000
+#define MAX_TRIES 10000
 
 int worker_actions(int secs, int num_threads, int reader, int writer);
 
